@@ -2,6 +2,7 @@ import { query } from "@/lib/db";
 import { monthBounds } from "@/lib/dates";
 import { calculateProjection } from "@/lib/budget/projections";
 import { incomeTypeLabel, normalizeIncomeType } from "@/lib/budget/income-types";
+import { postDueIncomeDeposits } from "@/lib/budget/income-posting";
 import { ensureBillInstancesForRange } from "@/lib/budget/recurrence";
 import { asBoolean, asNumber, asNullableString, asString } from "@/lib/coerce";
 import {
@@ -32,6 +33,7 @@ export type FinancialState = {
   savingsBalance: number;
   netCash: number;
   monthlyIncome: number;
+  recurringIncome: number;
   guaranteedIncome: number;
   variableIncome: number;
   oneTimeIncome: number;
@@ -88,9 +90,9 @@ export async function getFinancialState(householdId: string): Promise<FinancialS
         SELECT income_entries.income_type,
                COALESCE(categories.color, '#94a3b8') AS color,
                SUM(income_entries.deposit_amount) AS total,
-               SUM(CASE WHEN income_entries.recurrence = 'recurring' THEN income_entries.deposit_amount ELSE 0 END) AS recurring,
-               SUM(CASE WHEN income_entries.recurrence = 'one_time' THEN income_entries.deposit_amount ELSE 0 END) AS one_time,
-               SUM(CASE WHEN income_entries.guaranteed = true THEN income_entries.deposit_amount ELSE 0 END) AS guaranteed
+               SUM(CASE WHEN income_entries.income_frequency <> 'one_time' THEN income_entries.deposit_amount ELSE 0 END) AS recurring,
+               SUM(CASE WHEN income_entries.income_frequency = 'one_time' THEN income_entries.deposit_amount ELSE 0 END) AS one_time,
+               SUM(CASE WHEN income_entries.income_frequency <> 'one_time' AND income_entries.guaranteed = true THEN income_entries.deposit_amount ELSE 0 END) AS guaranteed
         FROM income_entries
         LEFT JOIN categories ON categories.id = income_entries.category_id
         WHERE income_entries.household_id = $1
@@ -135,6 +137,7 @@ export async function getFinancialState(householdId: string): Promise<FinancialS
     savingsBalance,
     netCash,
     monthlyIncome: currentRollup.income,
+    recurringIncome: currentRollup.recurringIncome,
     guaranteedIncome: currentRollup.guaranteedIncome,
     variableIncome: currentRollup.variableIncome,
     oneTimeIncome: currentRollup.oneTimeIncome,
@@ -183,10 +186,10 @@ export async function getMonthlyFinancialRollups(
       income AS (
         SELECT date_trunc('month', paycheck_date)::date AS month,
                SUM(deposit_amount) AS total,
-               SUM(CASE WHEN recurrence = 'recurring' THEN deposit_amount ELSE 0 END) AS recurring,
-               SUM(CASE WHEN recurrence = 'recurring' AND guaranteed = true THEN deposit_amount ELSE 0 END) AS guaranteed,
-               SUM(CASE WHEN recurrence = 'recurring' AND guaranteed = false THEN deposit_amount ELSE 0 END) AS variable,
-               SUM(CASE WHEN recurrence = 'one_time' THEN deposit_amount ELSE 0 END) AS one_time
+               SUM(CASE WHEN income_frequency <> 'one_time' THEN deposit_amount ELSE 0 END) AS recurring,
+               SUM(CASE WHEN income_frequency <> 'one_time' AND guaranteed = true THEN deposit_amount ELSE 0 END) AS guaranteed,
+               SUM(CASE WHEN income_frequency <> 'one_time' AND guaranteed = false THEN deposit_amount ELSE 0 END) AS variable,
+               SUM(CASE WHEN income_frequency = 'one_time' THEN deposit_amount ELSE 0 END) AS one_time
         FROM income_entries
         WHERE household_id = $1 AND paycheck_date >= $2 AND paycheck_date < $3
         GROUP BY 1
@@ -255,6 +258,8 @@ function emptyMonthlyRollup(month: string): MonthlyFinancialRollup {
 }
 
 export async function getFinancialAccounts(householdId: string) {
+  await postDueIncomeDeposits(householdId);
+
   const result = await query<{
     id: string;
     name: string;

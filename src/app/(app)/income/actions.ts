@@ -3,7 +3,9 @@
 import { requireUser } from "@/lib/auth";
 import { withTransaction } from "@/lib/db";
 import { applyAccountDelta } from "@/lib/budget/accounting";
+import { shouldPostToBalance } from "@/lib/budget/income-posting";
 import { revalidateFinancialPaths } from "@/lib/budget/revalidation";
+import { todayIso } from "@/lib/dates";
 import {
   defaultGuaranteedForIncomeType,
   defaultFrequencyForIncomeType,
@@ -23,7 +25,7 @@ export async function createIncomeEntry(formData: FormData) {
       values.categoryId ||
       (await findIncomeCategoryId(client, user.householdId, incomeTypeLabel(values.incomeType)));
 
-    await client.query(
+    const created = await client.query<{ id: string }>(
       `
         INSERT INTO income_entries (
           household_id, user_id, account_id, category_id, employer, income_type,
@@ -31,6 +33,7 @@ export async function createIncomeEntry(formData: FormData) {
           overtime_pay, bonus_pay, va_income, taxes_withheld, deposit_amount, notes, term
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        RETURNING id
       `,
       [
         user.householdId,
@@ -53,8 +56,9 @@ export async function createIncomeEntry(formData: FormData) {
         values.term || null
       ]
     );
+    const incomeId = created.rows[0]?.id;
 
-    if (values.accountId) {
+    if (incomeId && values.accountId && shouldPostToBalance(values.paycheckDate)) {
       await applyAccountDelta(client, {
         householdId: user.householdId,
         accountId: values.accountId,
@@ -64,6 +68,7 @@ export async function createIncomeEntry(formData: FormData) {
         description: `Income: ${values.employer}`,
         activityDate: values.paycheckDate
       });
+      await markIncomePosted(client, incomeId, user.householdId);
     }
   });
 
@@ -81,9 +86,10 @@ export async function updateIncomeEntry(formData: FormData) {
       deposit_amount: number;
       account_id: string | null;
       employer: string;
+      balance_posted_at: Date | null;
     }>(
       `
-        SELECT id, deposit_amount, account_id, employer
+        SELECT id, deposit_amount, account_id, employer, balance_posted_at
         FROM income_entries
         WHERE id = $1 AND household_id = $2
         FOR UPDATE
@@ -119,7 +125,8 @@ export async function updateIncomeEntry(formData: FormData) {
             taxes_withheld = $15,
             deposit_amount = $16,
             notes = $17,
-            term = $18
+            term = $18,
+            balance_posted_at = NULL
         WHERE id = $1 AND household_id = $2
       `,
       [
@@ -144,7 +151,7 @@ export async function updateIncomeEntry(formData: FormData) {
       ]
     );
 
-    if (current.account_id) {
+    if (current.account_id && current.balance_posted_at) {
       await applyAccountDelta(client, {
         householdId: user.householdId,
         accountId: current.account_id,
@@ -156,7 +163,7 @@ export async function updateIncomeEntry(formData: FormData) {
       });
     }
 
-    if (values.accountId) {
+    if (values.accountId && shouldPostToBalance(values.paycheckDate)) {
       await applyAccountDelta(client, {
         householdId: user.householdId,
         accountId: values.accountId,
@@ -166,6 +173,7 @@ export async function updateIncomeEntry(formData: FormData) {
         description: `Income: ${values.employer}`,
         activityDate: values.paycheckDate
       });
+      await markIncomePosted(client, incomeId, user.householdId);
     }
   });
 
@@ -182,9 +190,10 @@ export async function deleteIncomeEntry(formData: FormData) {
       deposit_amount: number;
       account_id: string | null;
       employer: string;
+      balance_posted_at: Date | null;
     }>(
       `
-        SELECT id, deposit_amount, account_id, employer
+        SELECT id, deposit_amount, account_id, employer, balance_posted_at
         FROM income_entries
         WHERE id = $1 AND household_id = $2
         FOR UPDATE
@@ -203,7 +212,7 @@ export async function deleteIncomeEntry(formData: FormData) {
       [incomeId, user.householdId]
     );
 
-    if (current.account_id) {
+    if (current.account_id && current.balance_posted_at) {
       await applyAccountDelta(client, {
         householdId: user.householdId,
         accountId: current.account_id,
@@ -211,12 +220,27 @@ export async function deleteIncomeEntry(formData: FormData) {
         amount: -current.deposit_amount,
         activityType: "income_deposit",
         description: `Deleted income: ${current.employer}`,
-        activityDate: new Date().toISOString().slice(0, 10)
+        activityDate: todayIso()
       });
     }
   });
 
   revalidateFinancialPaths();
+}
+
+async function markIncomePosted(
+  client: Parameters<Parameters<typeof withTransaction>[0]>[0],
+  incomeId: string,
+  householdId: string
+) {
+  await client.query(
+    `
+      UPDATE income_entries
+      SET balance_posted_at = now()
+      WHERE id = $1 AND household_id = $2
+    `,
+    [incomeId, householdId]
+  );
 }
 
 async function findIncomeCategoryId(

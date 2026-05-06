@@ -113,6 +113,7 @@ export async function getDashboardData(householdId: string) {
         WHERE income_entries.household_id = $1
           AND income_entries.paycheck_date >= $2
           AND income_entries.paycheck_date <= $3
+          AND income_entries.balance_posted_at IS NULL
         ORDER BY income_entries.paycheck_date ASC, income_entries.deposit_amount DESC
         LIMIT 6
       `,
@@ -171,6 +172,7 @@ export async function getDashboardData(householdId: string) {
     savingsBalance: financial.savingsBalance,
     netCash: financial.netCash,
     monthlyIncome: financial.monthlyIncome,
+    recurringIncome: financial.recurringIncome,
     guaranteedIncome: financial.guaranteedIncome,
     variableIncome: financial.variableIncome,
     oneTimeIncome: financial.oneTimeIncome,
@@ -373,9 +375,9 @@ export async function getIncomePageData(householdId: string, incomeTypeFilter?: 
         SELECT income_entries.income_type,
                COALESCE(categories.color, '#94a3b8') AS color,
                SUM(income_entries.deposit_amount) AS total,
-               SUM(CASE WHEN income_entries.recurrence = 'recurring' THEN income_entries.deposit_amount ELSE 0 END) AS recurring,
-               SUM(CASE WHEN income_entries.recurrence = 'one_time' THEN income_entries.deposit_amount ELSE 0 END) AS one_time,
-               SUM(CASE WHEN income_entries.guaranteed = true THEN income_entries.deposit_amount ELSE 0 END) AS guaranteed
+               SUM(CASE WHEN income_entries.income_frequency <> 'one_time' THEN income_entries.deposit_amount ELSE 0 END) AS recurring,
+               SUM(CASE WHEN income_entries.income_frequency = 'one_time' THEN income_entries.deposit_amount ELSE 0 END) AS one_time,
+               SUM(CASE WHEN income_entries.income_frequency <> 'one_time' AND income_entries.guaranteed = true THEN income_entries.deposit_amount ELSE 0 END) AS guaranteed
         FROM income_entries
         LEFT JOIN categories ON categories.id = income_entries.category_id
         WHERE income_entries.household_id = $1

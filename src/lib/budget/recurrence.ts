@@ -2,6 +2,7 @@ import { addDays, addMonths, addWeeks, addYears } from "date-fns";
 import { query } from "@/lib/db";
 import { clampMonthlyDueDate, isoDate, safeDate } from "@/lib/dates";
 import { asNumber, asString } from "@/lib/coerce";
+import { dollars } from "@/lib/money";
 import type { BillFrequency } from "@/lib/types";
 
 type RecurringBillRow = {
@@ -154,7 +155,7 @@ export async function ensureBillInstancesForRange(
             bill.household_id,
             billInstanceId,
             `${asString(bill.name, "Bill")} due`,
-            `${asString(bill.name, "Bill")} is due for $${asNumber(bill.amount).toFixed(2)}.`,
+            `${asString(bill.name, "Bill")} is due for ${dollars(asNumber(bill.amount))}.`,
             isoDate(dueDate)
           ]
         );

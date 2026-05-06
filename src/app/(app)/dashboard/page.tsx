@@ -46,7 +46,7 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
+      <section className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr))]">
         <StatCard
           detail="Manual checking account total"
           icon={Landmark}
@@ -97,8 +97,8 @@ export default async function DashboardPage() {
         />
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-3">
-        <Metric label="Recurring Income" value={data.guaranteedIncome} />
+      <section className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))]">
+        <Metric label="Recurring Income" value={data.recurringIncome} />
         <Metric label="Additional Income" value={data.variableIncome} />
         <Metric label="One-Time Income" value={data.oneTimeIncome} />
       </section>
@@ -167,8 +167,8 @@ export default async function DashboardPage() {
                 return (
                   <div key={account.id}>
                     <div className="flex items-center justify-between gap-3 text-sm">
-                      <span className="font-semibold text-white">{account.name}</span>
-                      <span className="font-bold text-slate-200">{dollars(account.currentBalance)}</span>
+                      <span className="min-w-0 truncate font-semibold text-white">{account.name}</span>
+                      <span className="shrink-0 font-bold tabular-nums text-slate-200">{dollars(account.currentBalance)}</span>
                     </div>
                     <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-800">
                       <div className="h-full rounded-full bg-sky-400" style={{ width: `${Math.min(share * 100, 100)}%` }} />
@@ -223,13 +223,13 @@ export default async function DashboardPage() {
               data.upcomingDeposits.map((deposit) => (
                 <div className="rounded-md border border-slate-800 bg-slate-950/40 p-3" key={deposit.id}>
                   <div className="flex items-center justify-between gap-4">
-                    <div>
+                    <div className="min-w-0">
                       <p className="font-semibold text-white">{deposit.incomeTypeLabel}</p>
-                      <p className="text-sm text-slate-400">
-                        {displayShortDate(deposit.paycheckDate)} - {deposit.accountName ?? "not linked"}
+                      <p className="break-words text-sm text-slate-400">
+                        {deposit.employer} - {displayShortDate(deposit.paycheckDate)} - {deposit.accountName ?? "not linked"}
                       </p>
                     </div>
-                    <p className="font-bold text-teal-200">{dollars(deposit.depositAmount)}</p>
+                    <p className="shrink-0 font-bold text-teal-200">{dollars(deposit.depositAmount)}</p>
                   </div>
                 </div>
               ))

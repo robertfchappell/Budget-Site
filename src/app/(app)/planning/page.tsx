@@ -63,7 +63,7 @@ export default async function PlanningPage() {
       </section>
 
       <section className="grid gap-4 sm:grid-cols-3">
-        <Metric label="Recurring Income" value={data.dashboard.projection.guaranteedIncome} />
+        <Metric label="Recurring Income" value={data.dashboard.recurringIncome} />
         <Metric label="Additional Income" value={data.dashboard.projection.variableIncome} />
         <Metric label="One-Time Income" value={data.dashboard.projection.oneTimeIncome} />
       </section>

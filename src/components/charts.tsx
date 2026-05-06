@@ -17,6 +17,7 @@ import {
   YAxis
 } from "recharts";
 import { asArray, asNumber, asString } from "@/lib/coerce";
+import { dollars } from "@/lib/money";
 import type { ChartDatum, TrendDatum } from "@/lib/types";
 
 const tooltipStyle = {
@@ -58,7 +59,7 @@ export function CategoryDonut({ data }: { data: ChartDatum[] }) {
               <Cell fill={entry.color ?? "#38bdf8"} key={entry.name} />
             ))}
           </Pie>
-          <Tooltip contentStyle={tooltipStyle} formatter={(value) => `$${Number(value).toFixed(2)}`} />
+          <Tooltip contentStyle={tooltipStyle} formatter={(value) => dollars(asNumber(value))} />
           <Legend iconType="circle" />
         </PieChart>
       </ResponsiveContainer>
@@ -95,8 +96,8 @@ export function BudgetTrendChart({ data }: { data: TrendDatum[] }) {
           </defs>
           <CartesianGrid stroke="rgba(148, 163, 184, 0.12)" vertical={false} />
           <XAxis dataKey="month" stroke="#94a3b8" tickLine={false} />
-          <YAxis stroke="#94a3b8" tickFormatter={(value) => `$${Number(value) / 1000}k`} tickLine={false} />
-          <Tooltip contentStyle={tooltipStyle} formatter={(value) => `$${Number(value).toFixed(2)}`} />
+          <YAxis stroke="#94a3b8" tickFormatter={(value) => dollars(asNumber(value))} tickLine={false} />
+          <Tooltip contentStyle={tooltipStyle} formatter={(value) => dollars(asNumber(value))} />
           <Area dataKey="income" fill="url(#incomeFill)" name="Income" stroke="#2dd4bf" strokeWidth={2} />
           <Area dataKey="expenses" fill="url(#expenseFill)" name="Expenses" stroke="#fb7185" strokeWidth={2} />
           <Area dataKey="bills" fill="transparent" name="Bills" stroke="#fbbf24" strokeWidth={2} />
@@ -126,8 +127,8 @@ export function SimpleBarChart({ data }: { data: ChartDatum[] }) {
         <BarChart data={chartData}>
           <CartesianGrid stroke="rgba(148, 163, 184, 0.12)" vertical={false} />
           <XAxis dataKey="name" stroke="#94a3b8" tickLine={false} />
-          <YAxis stroke="#94a3b8" tickFormatter={(value) => `$${Number(value)}`} tickLine={false} />
-          <Tooltip contentStyle={tooltipStyle} formatter={(value) => `$${Number(value).toFixed(2)}`} />
+          <YAxis stroke="#94a3b8" tickFormatter={(value) => dollars(asNumber(value))} tickLine={false} />
+          <Tooltip contentStyle={tooltipStyle} formatter={(value) => dollars(asNumber(value))} />
           <Bar dataKey="value" fill="#38bdf8" radius={[6, 6, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>

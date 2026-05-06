@@ -23,15 +23,15 @@ export function StatCard({
   };
 
   return (
-    <article className="panel p-4">
+    <article className="panel min-w-0 p-4">
       <div className="flex items-start justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <p className="text-sm font-semibold text-slate-400">{title}</p>
-          <p className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+          <p className="mt-2 break-words text-2xl font-bold tracking-tight text-white sm:text-3xl">
             {dollars(value)}
           </p>
         </div>
-        <span className={`grid size-10 place-items-center rounded-md ${tones[tone]}`}>
+        <span className={`grid size-10 shrink-0 place-items-center rounded-md ${tones[tone]}`}>
           <Icon aria-hidden size={20} />
         </span>
       </div>

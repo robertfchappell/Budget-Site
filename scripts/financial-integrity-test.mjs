@@ -97,6 +97,15 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function tomorrowIso() {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 async function signupFreshHousehold() {
   const marker = Date.now();
   const signupPage = await get("/signup");
@@ -286,6 +295,121 @@ async function verifyIncomeLifecycle(cookie, checkingId) {
   assertMoney((await balances(cookie)).checking, 1000, "Income delete should restore checking");
 }
 
+async function verifyFutureIncomePosting(cookie, checkingId) {
+  const employer = `Future Income ${Date.now()}`;
+  let page = await get("/income", cookie);
+  const createForm = findForm(page.text, (form) => form.includes('name="incomeType"'), "future income create");
+
+  await post("/income", cookie, createForm, {
+    employer,
+    incomeType: "regular_paycheck",
+    recurrence: "recurring",
+    incomeFrequency: "biweekly",
+    paycheckDate: tomorrowIso(),
+    basePay: "0",
+    overtimePay: "0",
+    bonusPay: "0",
+    vaIncome: "0",
+    taxesWithheld: "0",
+    depositAmount: "400.00",
+    accountId: checkingId,
+    term: "",
+    notes: "scheduled future deposit"
+  });
+
+  assertMoney((await balances(cookie)).checking, 1000, "Future-dated income should not change checking today");
+
+  const dashboard = await get("/dashboard", cookie);
+  assert(dashboard.text.includes(employer), "Future-dated income should render as an upcoming deposit");
+
+  page = await get("/income", cookie);
+  const editForm = findForm(page.text, (form) => form.includes(employer) && form.includes('name="incomeId"'), "future income edit");
+  const incomeId = inputValue(editForm, "incomeId");
+
+  await post("/income", cookie, editForm, {
+    incomeId,
+    employer,
+    incomeType: "regular_paycheck",
+    recurrence: "recurring",
+    incomeFrequency: "biweekly",
+    paycheckDate: todayIso(),
+    basePay: "0",
+    overtimePay: "0",
+    bonusPay: "0",
+    vaIncome: "0",
+    taxesWithheld: "0",
+    depositAmount: "400.00",
+    accountId: checkingId,
+    term: "",
+    notes: "posted today"
+  });
+  assertMoney((await balances(cookie)).checking, 1400, "Changing future income to today should post checking");
+
+  page = await get("/income", cookie);
+  const deleteForm = findForm(page.text, (form) => form.includes(`value="${incomeId}"`) && form.includes("Delete"), "future income delete");
+  await post("/income", cookie, deleteForm);
+  assertMoney((await balances(cookie)).checking, 1000, "Deleting posted income should restore checking");
+}
+
+async function verifyRecurringIncomeClassification(cookie, checkingId) {
+  const employer = `Recurring Paycheck ${Date.now()}`;
+  let page = await get("/income", cookie);
+  const createForm = findForm(page.text, (form) => form.includes('name="incomeType"'), "recurring income create");
+
+  await post("/income", cookie, createForm, {
+    employer,
+    incomeType: "regular_paycheck",
+    recurrence: "recurring",
+    incomeFrequency: "biweekly",
+    paycheckDate: todayIso(),
+    basePay: "0",
+    overtimePay: "0",
+    bonusPay: "0",
+    vaIncome: "0",
+    taxesWithheld: "0",
+    depositAmount: "300.00",
+    accountId: checkingId,
+    term: "",
+    notes: ""
+  });
+
+  await post("/income", cookie, createForm, {
+    employer: "VA recurring integrity",
+    incomeType: "va_disability",
+    recurrence: "recurring",
+    incomeFrequency: "monthly",
+    paycheckDate: todayIso(),
+    basePay: "0",
+    overtimePay: "0",
+    bonusPay: "0",
+    vaIncome: "0",
+    taxesWithheld: "0",
+    depositAmount: "125.00",
+    accountId: checkingId,
+    term: "",
+    notes: "monthly VA disability"
+  });
+
+  assertMoney((await balances(cookie)).checking, 1425, "Recurring income test deposits should post checking");
+
+  const dashboard = await get("/dashboard", cookie);
+  assert(dashboard.text.includes("$425"), "Recurring Income should include regular paycheck and monthly VA disability");
+
+  page = await get("/income", cookie);
+  const regularForm = findForm(page.text, (form) => form.includes(employer) && form.includes('name="incomeId"'), "regular recurring income edit");
+  const vaForm = findForm(page.text, (form) => form.includes('value="125"') && form.includes('name="incomeId"'), "VA recurring income edit");
+  const regularId = inputValue(regularForm, "incomeId");
+  const vaId = inputValue(vaForm, "incomeId");
+
+  let deleteForm = findForm(page.text, (form) => form.includes(`value="${regularId}"`) && form.includes("Delete"), "regular recurring income delete");
+  await post("/income", cookie, deleteForm);
+  page = await get("/income", cookie);
+  deleteForm = findForm(page.text, (form) => form.includes(`value="${vaId}"`) && form.includes("Delete"), "VA recurring income delete");
+  await post("/income", cookie, deleteForm);
+
+  assertMoney((await balances(cookie)).checking, 1000, "Recurring income classification cleanup should restore checking");
+}
+
 async function verifyTransferLifecycle(cookie, checkingId, savingsId) {
   const page = await get("/settings", cookie);
   const transferForm = findForm(page.text, (form) => form.includes('name="fromAccountId"'), "transfer");
@@ -356,6 +480,8 @@ async function main() {
   const initial = await setInitialBalances(cookie);
 
   await verifyAccountManagement(cookie);
+  await verifyFutureIncomePosting(cookie, initial.checkingId);
+  await verifyRecurringIncomeClassification(cookie, initial.checkingId);
   await verifyExpenseLifecycle(cookie, initial.checkingId);
   await verifyIncomeLifecycle(cookie, initial.checkingId);
   await verifyTransferLifecycle(cookie, initial.checkingId, initial.savingsId);

@@ -1,9 +1,12 @@
 export function dollars(value: number | null | undefined) {
+  const numericValue = Number(value ?? 0);
+
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
+    useGrouping: true,
     maximumFractionDigits: 2
-  }).format(Number(value ?? 0));
+  }).format(Number.isFinite(numericValue) ? numericValue : 0);
 }
 
 export function numeric(value: FormDataEntryValue | null) {
