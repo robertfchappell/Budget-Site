@@ -1,6 +1,13 @@
 import Papa from "papaparse";
 import { requireUser } from "@/lib/auth";
 import { query } from "@/lib/db";
+import {
+  billStatusDisplayLabel,
+  categoryDisplayLabel,
+  incomeFrequencyDisplayLabel,
+  incomeTypeDisplayLabel,
+  paymentMethodDisplayLabel
+} from "@/lib/display-labels";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +32,7 @@ export async function GET(_request: Request, context: RouteContext) {
   });
 }
 
-async function exportRows(kind: string, householdId: string) {
+async function exportRows(kind: string, householdId: string): Promise<Array<Record<string, unknown>>> {
   if (kind === "expenses") {
     const result = await query(
       `
@@ -42,7 +49,11 @@ async function exportRows(kind: string, householdId: string) {
       `,
       [householdId]
     );
-    return result.rows;
+    return result.rows.map((row) => ({
+      ...row,
+      category: categoryDisplayLabel(row.category),
+      payment_method: paymentMethodDisplayLabel(row.payment_method)
+    }));
   }
 
   if (kind === "income") {
@@ -63,7 +74,12 @@ async function exportRows(kind: string, householdId: string) {
       `,
       [householdId]
     );
-    return result.rows;
+    return result.rows.map((row) => ({
+      ...row,
+      income_type: incomeTypeDisplayLabel(row.income_type),
+      recurrence: incomeFrequencyDisplayLabel(row.recurrence),
+      income_frequency: incomeFrequencyDisplayLabel(row.income_frequency)
+    }));
   }
 
   if (kind === "bills") {
@@ -80,7 +96,11 @@ async function exportRows(kind: string, householdId: string) {
       `,
       [householdId]
     );
-    return result.rows;
+    return result.rows.map((row) => ({
+      ...row,
+      status: billStatusDisplayLabel(row.status),
+      category: categoryDisplayLabel(row.category)
+    }));
   }
 
   return [];

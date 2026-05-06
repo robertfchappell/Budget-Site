@@ -83,7 +83,7 @@ export function BillForm({
             <option value="weekly">Weekly</option>
             <option value="biweekly">Every other week</option>
             <option value="yearly">Yearly</option>
-            <option value="one_time">One-time</option>
+            <option value="one_time">One-Time</option>
           </select>
         </div>
 

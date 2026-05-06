@@ -10,6 +10,7 @@ import {
   type InviteState
 } from "@/app/(app)/settings/actions";
 import { displayDate } from "@/lib/dates";
+import { userRoleDisplayLabel } from "@/lib/display-labels";
 import type { HouseholdInvite, HouseholdMember } from "@/lib/types";
 
 const initialState: InviteState = {};
@@ -224,7 +225,7 @@ export function HouseholdInvites({
                       <p className="text-sm text-slate-400">{member.email}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="badge capitalize">{member.role}</span>
+                      <span className="badge">{userRoleDisplayLabel(member.role)}</span>
                       {member.id !== currentUserId ? (
                         <button
                           aria-label={`Remove ${member.name}`}
@@ -258,10 +259,10 @@ export function HouseholdInvites({
                       <div>
                         <p className="font-semibold text-white">{invite.invitedEmail}</p>
                         <p className="text-sm text-slate-400">
-                          {invite.invitedRole} - expires {displayDate(invite.expiresAt)}
+                          {userRoleDisplayLabel(invite.invitedRole)} - expires {displayDate(invite.expiresAt)}
                         </p>
                       </div>
-                      <span className="badge capitalize">pending</span>
+                      <span className="badge">Pending</span>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button

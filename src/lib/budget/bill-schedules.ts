@@ -36,7 +36,7 @@ export function describeBillSchedule(bill: RecurringBill) {
     return `Every ${months[parts.month - 1]} ${parts.day}`;
   }
 
-  return `One-time on ${bill.startDate}`;
+  return `One-Time on ${bill.startDate}`;
 }
 
 function partsFromDate(value: string | null | undefined) {

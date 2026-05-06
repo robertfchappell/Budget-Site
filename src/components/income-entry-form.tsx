@@ -24,7 +24,7 @@ type IncomePreset = {
 
 const presets: Record<IncomeType, IncomePreset> = {
   regular_paycheck: {
-    title: "Regular paycheck",
+    title: "Regular Paycheck",
     helper: "Record the money that actually lands in checking. Extra paycheck details can stay tucked away unless you need them.",
     amountLabel: "Net Deposit",
     dateLabel: "Pay date",
@@ -48,8 +48,8 @@ const presets: Record<IncomeType, IncomePreset> = {
     advancedPayroll: false
   },
   va_disability: {
-    title: "VA disability",
-    helper: "VA disability stays separate from paycheck income in reports and forecasts.",
+    title: "VA Disability",
+    helper: "VA Disability stays separate from paycheck income in reports and forecasts.",
     amountLabel: "Amount",
     dateLabel: "Pay date",
     showName: false,
@@ -59,7 +59,7 @@ const presets: Record<IncomeType, IncomePreset> = {
     advancedPayroll: false
   },
   pell_grant: {
-    title: "Pell grant",
+    title: "Pell Grant",
     helper: "Keep school funds independent from paychecks and loans.",
     amountLabel: "Amount",
     dateLabel: "Disbursement date",
@@ -72,7 +72,7 @@ const presets: Record<IncomeType, IncomePreset> = {
     advancedPayroll: false
   },
   student_loan: {
-    title: "Student loan",
+    title: "Student Loan",
     helper: "Track loan disbursements as their own cashflow source instead of mixing them into income.",
     amountLabel: "Amount",
     dateLabel: "Disbursement date",
@@ -85,7 +85,7 @@ const presets: Record<IncomeType, IncomePreset> = {
     advancedPayroll: false
   },
   va_education_stipend: {
-    title: "VA education stipend",
+    title: "Dependent/Spouse VA Education Stipend",
     helper: "Track dependent or spouse education stipends separately from disability and paychecks.",
     amountLabel: "Amount",
     dateLabel: "Pay date",
@@ -109,7 +109,7 @@ const presets: Record<IncomeType, IncomePreset> = {
     advancedPayroll: false
   },
   misc: {
-    title: "Miscellaneous income",
+    title: "Miscellaneous Income",
     helper: "Use this for anything that does not need its own preset.",
     amountLabel: "Amount",
     dateLabel: "Date received",
@@ -122,7 +122,7 @@ const presets: Record<IncomeType, IncomePreset> = {
 };
 
 const frequencyLabels: Array<{ value: IncomeFrequency; label: string }> = [
-  { value: "one_time", label: "One-time" },
+  { value: "one_time", label: "One-Time" },
   { value: "weekly", label: "Weekly" },
   { value: "biweekly", label: "Biweekly" },
   { value: "monthly", label: "Monthly" }

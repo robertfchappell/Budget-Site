@@ -16,6 +16,7 @@ import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { asArray } from "@/lib/coerce";
 import { describeBillSchedule } from "@/lib/budget/bill-schedules";
 import { safeIsoDate, todayIso } from "@/lib/dates";
+import { billStatusDisplayLabel } from "@/lib/display-labels";
 import { dollars } from "@/lib/money";
 import type { Account, BillInstance, Category, RecurringBill } from "@/lib/types";
 
@@ -108,7 +109,7 @@ export function BillCalendar({
                 </p>
                 <h3 className="mt-1 text-xl font-bold text-white">{selectedBill.billName}</h3>
                 <p className="mt-1 text-sm text-slate-400">
-                  {safeIsoDate(selectedBill.dueDate, todayIso())} - {selectedBill.status}
+                  {safeIsoDate(selectedBill.dueDate, todayIso())} - {billStatusDisplayLabel(selectedBill.status)}
                 </p>
               </div>
               <button

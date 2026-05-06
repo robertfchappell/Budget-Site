@@ -6,6 +6,7 @@ import { createExpense, deleteExpense, importExpensesCsv, updateExpense } from "
 import { getExpensesPageData } from "@/lib/budget/data";
 import { requireUser } from "@/lib/auth";
 import { displayDate, todayIso } from "@/lib/dates";
+import { paymentMethodDisplayLabel } from "@/lib/display-labels";
 import { dollars } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -160,7 +161,7 @@ export default async function ExpensesPage() {
                   <td className="table-cell font-semibold text-white">{expense.merchant}</td>
                   <td className="table-cell text-slate-300">{expense.categoryName ?? "Uncategorized"}</td>
                   <td className="table-cell">
-                    <span className="badge capitalize">{expense.paymentMethod}</span>
+                    <span className="badge">{paymentMethodDisplayLabel(expense.paymentMethod)}</span>
                   </td>
                   <td className="table-cell text-slate-300">{expense.accountName ?? "Manual"}</td>
                   <td className="table-cell font-bold text-rose-200">{dollars(expense.amount)}</td>

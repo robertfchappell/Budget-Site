@@ -18,6 +18,11 @@ import {
   normalizePaymentMethod
 } from "@/lib/budget/normalizers";
 import { asBoolean, asNumber, asNullableString, asString } from "@/lib/coerce";
+import {
+  activityTypeDisplayLabel,
+  categoryDisplayLabel,
+  nullableDisplayLabel
+} from "@/lib/display-labels";
 import type {
   BillInstance,
   Category,
@@ -59,7 +64,7 @@ export async function getCategories(householdId: string, kind?: string) {
 
   return result.rows.map((row) => ({
     id: asString(row.id),
-    name: asString(row.name, "Uncategorized"),
+    name: categoryDisplayLabel(row.name),
     kind: normalizeCategoryKind(row.kind),
     color: normalizeColor(row.color),
     icon: asString(row.icon, "circle")
@@ -193,7 +198,7 @@ export async function getDashboardData(householdId: string) {
       accountName: asNullableString(row.account_name)
     })),
     spendingByCategory: spendingByCategory.rows.map((row) => ({
-      name: asString(row.name, "Uncategorized"),
+      name: categoryDisplayLabel(row.name),
       value: asNumber(row.total),
       color: normalizeColor(row.color)
     })) satisfies ChartDatum[],
@@ -202,7 +207,7 @@ export async function getDashboardData(householdId: string) {
       id: asString(row.id),
       accountId: asString(row.account_id),
       accountName: asString(row.account_name, "Account"),
-      activityType: asString(row.activity_type, "activity"),
+      activityType: activityTypeDisplayLabel(row.activity_type),
       amount: asNumber(row.amount),
       balanceAfter: asNumber(row.balance_after),
       description: asString(row.description, "Account activity"),
@@ -281,7 +286,7 @@ export async function getBillsPageData(householdId: string) {
       nextDueDate: safeIsoDate(row.next_due_date) || null,
       categoryId: asNullableString(row.category_id),
       accountId: asNullableString(row.account_id),
-      categoryName: asNullableString(row.category_name),
+      categoryName: nullableDisplayLabel(row.category_name),
       categoryColor: row.category_color ? normalizeColor(row.category_color) : null,
       autopay: asBoolean(row.autopay),
       active: asBoolean(row.active, true),
@@ -401,7 +406,7 @@ export async function getIncomePageData(householdId: string, incomeTypeFilter?: 
       incomeFrequency: normalizeIncomeFrequency(row.income_frequency),
       guaranteed: asBoolean(row.guaranteed),
       categoryId: asNullableString(row.category_id),
-      categoryName: asNullableString(row.category_name),
+      categoryName: nullableDisplayLabel(row.category_name),
       categoryColor: row.category_color ? normalizeColor(row.category_color) : null,
       paycheckDate: safeIsoDate(row.paycheck_date),
       basePay: asNumber(row.base_pay),
@@ -420,7 +425,7 @@ export async function getIncomePageData(householdId: string, incomeTypeFilter?: 
     categories,
     selectedIncomeType: normalizedFilter,
     totals: totals.rows.map((row) => ({
-      name: asString(row.name, "Income"),
+      name: categoryDisplayLabel(row.name ?? "Income"),
       value: asNumber(row.total)
     })) satisfies ChartDatum[],
     byType: byType.rows.map((row) => {
@@ -479,7 +484,7 @@ export async function getExpensesPageData(householdId: string) {
     categories,
     accounts,
     byCategory: byCategory.rows.map((row) => ({
-      name: asString(row.name, "Uncategorized"),
+      name: categoryDisplayLabel(row.name),
       value: asNumber(row.total),
       color: normalizeColor(row.color)
     })) satisfies ChartDatum[],
@@ -672,7 +677,7 @@ export async function getSettingsPageData(householdId: string) {
       id: asString(row.id),
       accountId: asString(row.account_id),
       accountName: asString(row.account_name, "Account"),
-      activityType: asString(row.activity_type, "activity"),
+      activityType: activityTypeDisplayLabel(row.activity_type),
       amount: asNumber(row.amount),
       balanceAfter: asNumber(row.balance_after),
       description: asString(row.description, "Account activity"),
@@ -780,7 +785,7 @@ async function queryBillInstances(whereSql: string, params: unknown[]) {
     paidAt: safeIsoDate(row.paid_at) || null,
     notes: asNullableString(row.notes),
     categoryId: asNullableString(row.category_id),
-    categoryName: asNullableString(row.category_name),
+    categoryName: nullableDisplayLabel(row.category_name),
     categoryColor: row.category_color ? normalizeColor(row.category_color) : null,
     accountId: asNullableString(row.account_id),
     accountName: asNullableString(row.account_name)
@@ -826,7 +831,7 @@ async function queryExpenses(whereSql: string, params: unknown[]) {
     expenseDate: safeIsoDate(row.expense_date),
     paymentMethod: normalizePaymentMethod(row.payment_method),
     categoryId: asNullableString(row.category_id),
-    categoryName: asNullableString(row.category_name),
+    categoryName: nullableDisplayLabel(row.category_name),
     categoryColor: row.category_color ? normalizeColor(row.category_color) : null,
     userName: asString(row.user_name, "Household"),
     accountId: asNullableString(row.account_id),

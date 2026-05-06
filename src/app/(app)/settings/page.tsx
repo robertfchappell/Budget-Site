@@ -6,6 +6,7 @@ import { HouseholdInvites } from "@/components/household-invites";
 import { getSettingsPageData } from "@/lib/budget/data";
 import { requireUser } from "@/lib/auth";
 import { displayDate, todayIso } from "@/lib/dates";
+import { accountTypeDisplayLabel } from "@/lib/display-labels";
 import { dollars } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -86,8 +87,8 @@ export default async function SettingsPage() {
                     <input name="accountId" type="hidden" value={account.id} />
                     <div>
                       <p className="font-semibold text-white">{account.name}</p>
-                      <p className="text-sm capitalize text-slate-400">
-                        {account.type} - {account.institution ?? "Manual"}
+                      <p className="text-sm text-slate-400">
+                        {accountTypeDisplayLabel(account.type)} - {account.institution ?? "Manual"}
                       </p>
                     </div>
                     <input

@@ -46,7 +46,7 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <section className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr))]">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
         <StatCard
           detail="Manual checking account total"
           icon={Landmark}
@@ -81,26 +81,6 @@ export default async function DashboardPage() {
           tone="rose"
           value={data.monthlyExpenses}
         />
-        <StatCard
-          detail={`${dollars(data.paidBills)} paid so far`}
-          icon={ReceiptText}
-          title="Monthly Bills"
-          tone="amber"
-          value={data.monthlyBills}
-        />
-        <StatCard
-          detail="Planned savings contributions"
-          icon={PiggyBank}
-          title="Monthly Savings"
-          tone="blue"
-          value={data.monthlySavingsTarget}
-        />
-      </section>
-
-      <section className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))]">
-        <Metric label="Recurring Income" value={data.recurringIncome} />
-        <Metric label="Additional Income" value={data.variableIncome} />
-        <Metric label="One-Time Income" value={data.oneTimeIncome} />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">

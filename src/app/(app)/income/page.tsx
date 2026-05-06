@@ -8,6 +8,7 @@ import { getIncomePageData } from "@/lib/budget/data";
 import { requireUser } from "@/lib/auth";
 import { incomeTypeOptions } from "@/lib/budget/income-types";
 import { displayDate } from "@/lib/dates";
+import { incomeFrequencyDisplayLabel } from "@/lib/display-labels";
 import { dollars } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -110,7 +111,7 @@ export default async function IncomePage({
                     {entry.term ? <p className="mt-1 text-xs text-slate-400">{entry.term}</p> : null}
                   </td>
                   <td className="table-cell text-slate-300">
-                    {incomeFrequencyLabel(entry.incomeFrequency)}
+                    {incomeFrequencyDisplayLabel(entry.incomeFrequency)}
                   </td>
                   <td className="table-cell text-slate-300">{entry.accountName ?? "Not linked"}</td>
                   <td className="table-cell font-bold text-teal-200">{dollars(entry.depositAmount)}</td>
@@ -149,7 +150,7 @@ export default async function IncomePage({
 
 function incomeDetail(entry: { incomeType: string; employer: string }) {
   if (entry.incomeType === "va_disability") {
-    return "VA disability";
+    return "VA Disability";
   }
 
   if (entry.incomeType === "bonus") {
@@ -157,24 +158,8 @@ function incomeDetail(entry: { incomeType: string; employer: string }) {
   }
 
   if (entry.incomeType === "misc") {
-    return entry.employer === "Miscellaneous income" ? "Miscellaneous" : entry.employer;
+    return entry.employer.toLowerCase() === "miscellaneous income" ? "Miscellaneous Income" : entry.employer;
   }
 
   return entry.employer;
-}
-
-function incomeFrequencyLabel(value: string) {
-  if (value === "weekly") {
-    return "Weekly";
-  }
-
-  if (value === "biweekly") {
-    return "Biweekly";
-  }
-
-  if (value === "monthly") {
-    return "Monthly";
-  }
-
-  return "One-time";
 }

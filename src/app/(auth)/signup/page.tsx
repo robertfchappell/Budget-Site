@@ -38,7 +38,7 @@ export default async function SignupPage({
             Track every dollar together.
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg">
-            Plan bills, savings, paychecks, and safe-to-spend cash in one private family budget built for the way real households move money.
+            Plan bills, savings, paychecks, and shared cash in one private family budget built for the way real households move money.
           </p>
 
           <div className="mt-8 grid gap-3 sm:grid-cols-3">

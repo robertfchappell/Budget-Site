@@ -12,6 +12,7 @@ import { getBillsPageData } from "@/lib/budget/data";
 import { describeBillSchedule } from "@/lib/budget/bill-schedules";
 import { requireUser } from "@/lib/auth";
 import { displayDate } from "@/lib/dates";
+import { billStatusDisplayLabel } from "@/lib/display-labels";
 import { dollars } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -78,7 +79,7 @@ export default async function BillsPage() {
                     <td className="table-cell text-slate-300">{bill.categoryName ?? "Uncategorized"}</td>
                     <td className="table-cell font-bold text-white">{dollars(bill.amount)}</td>
                     <td className="table-cell">
-                      <span className="badge capitalize">{bill.status}</span>
+                      <span className="badge">{billStatusDisplayLabel(bill.status)}</span>
                     </td>
                     <td className="table-cell">
                       {bill.status === "paid" ? (

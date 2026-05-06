@@ -418,7 +418,7 @@ async function main() {
     ["/planning", "Planning"],
     ["/bills", "Bills"],
     ["/income", "Income"],
-    ["/income?type=va_disability", "VA disability income"],
+    ["/income?type=va_disability", "VA Disability"],
     ["/expenses", "Expenses"],
     ["/settings", "Invite Household Member"]
   ]) {

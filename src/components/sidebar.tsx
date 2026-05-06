@@ -11,6 +11,7 @@ import {
   WalletCards
 } from "lucide-react";
 import { logoutAction } from "@/app/(app)/actions";
+import { userRoleDisplayLabel } from "@/lib/display-labels";
 import type { UserContext } from "@/lib/types";
 
 const nav = [
@@ -55,7 +56,7 @@ export function Sidebar({ user }: { user: UserContext }) {
         <div className="mt-auto border-t border-slate-800 pt-4">
           <div className="mb-3 px-2">
             <p className="text-sm font-semibold text-white">{user.name}</p>
-            <p className="text-xs capitalize text-slate-400">{user.role}</p>
+            <p className="text-xs text-slate-400">{userRoleDisplayLabel(user.role)}</p>
           </div>
           <form action={logoutAction}>
             <button className="secondary-button w-full" type="submit">
