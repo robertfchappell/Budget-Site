@@ -322,22 +322,25 @@ export async function markBillPaid(formData: FormData) {
       return;
     }
 
+    if (!bill.account_id) {
+      console.warn(`[bills] Cannot mark bill ${bill.id} paid without a linked account.`);
+      return;
+    }
+
     await client.query(
       "UPDATE bill_instances SET status = 'paid', paid_at = now() WHERE id = $1",
       [bill.id]
     );
 
-    if (bill.account_id) {
-      await applyAccountDelta(client, {
-        householdId: user.householdId,
-        accountId: bill.account_id,
-        userId: user.id,
-        amount: -bill.amount,
-        activityType: "bill_payment",
-        description: `Bill payment: ${bill.bill_name}`,
-        activityDate: safeIsoDate(bill.due_date, todayIso())
-      });
-    }
+    await applyAccountDelta(client, {
+      householdId: user.householdId,
+      accountId: bill.account_id,
+      userId: user.id,
+      amount: -bill.amount,
+      activityType: "bill_payment",
+      description: `Bill payment: ${bill.bill_name}`,
+      activityDate: safeIsoDate(bill.due_date, todayIso())
+    });
   });
 
   revalidateFinancialPaths(financialPathGroups.bills);

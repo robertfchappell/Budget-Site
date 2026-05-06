@@ -269,7 +269,7 @@ export default async function DashboardPage() {
         <article className="panel p-4">
           <h2 className="text-lg font-bold text-white">Monthly Outlook</h2>
           <p className="mt-1 text-sm text-slate-400">
-            Actual balances come from accounts. Forecast values add pending deposits, unpaid bills, and planned savings.
+            Actual balances come from accounts. Forecast values add pending deposits and subtract remaining bills.
           </p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <Metric label="Forecast Checking" value={data.projection.projectedEndOfMonthBalance} />
@@ -280,6 +280,7 @@ export default async function DashboardPage() {
             <Metric label="Pending Deposits" value={data.projection.pendingIncome} />
             <Metric label="Recurring Bills" value={data.projection.totalCommittedBills} />
             <Metric label="Recorded Expenses" value={data.monthlyExpenses} />
+            <Metric label="Scheduled Expenses" value={data.projection.scheduledExpensesRemaining} />
             <Metric label="Planned Savings" value={data.projection.projectedSavings} />
             <Metric label="Month Trajectory" value={data.projection.monthlyRollover} />
           </div>

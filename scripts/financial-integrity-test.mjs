@@ -126,6 +126,28 @@ function tomorrowIso() {
   return `${year}-${month}-${day}`;
 }
 
+function monthlyOccurrenceCount(startIso, frequency) {
+  const date = new Date(`${startIso}T00:00:00`);
+  const end = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+  let count = 0;
+
+  while (date < end) {
+    count += 1;
+
+    if (frequency === "weekly") {
+      date.setDate(date.getDate() + 7);
+    } else if (frequency === "biweekly") {
+      date.setDate(date.getDate() + 14);
+    } else if (frequency === "monthly") {
+      date.setMonth(date.getMonth() + 1);
+    } else {
+      break;
+    }
+  }
+
+  return count;
+}
+
 async function signupFreshHousehold() {
   const marker = Date.now();
   const signupPage = await get("/signup");
@@ -341,9 +363,10 @@ async function verifyFutureIncomePosting(cookie, checkingId) {
 
   const dashboard = await get("/dashboard", cookie);
   assert(dashboard.text.includes(employer), "Future-dated income should render as an upcoming deposit");
+  const expectedScheduled = 400 * monthlyOccurrenceCount(tomorrowIso(), "biweekly");
   assertMoney(moneyAfterLabel(dashboard.text, "Monthly Income"), 0, "Future income should not count as posted monthly income");
-  assertMoney(moneyAfterLabel(dashboard.text, "Scheduled Income"), 400, "Forecast should include future scheduled income");
-  assertMoney(moneyAfterLabel(dashboard.text, "Pending Deposits"), 400, "Forecast should show future income as pending deposits");
+  assertMoney(moneyAfterLabel(dashboard.text, "Scheduled Income"), expectedScheduled, "Forecast should include every remaining scheduled paycheck this month");
+  assertMoney(moneyAfterLabel(dashboard.text, "Pending Deposits"), expectedScheduled, "Forecast should show every remaining scheduled paycheck as pending deposits");
 
   page = await get("/income", cookie);
   const editForm = findForm(page.text, (form) => form.includes(employer) && form.includes('name="incomeId"'), "future income edit");
@@ -418,7 +441,7 @@ async function verifyRecurringIncomeClassification(cookie, checkingId) {
   assertMoney((await balances(cookie)).checking, 1425, "Recurring income test deposits should post checking");
 
   const dashboard = await get("/dashboard", cookie);
-  assert(dashboard.text.includes("$425"), "Recurring Income should include regular paycheck and monthly VA disability");
+  assertMoney(moneyAfterLabel(dashboard.text, "Monthly Income"), 425, "Posted monthly income should include regular paycheck and monthly VA disability");
 
   page = await get("/income", cookie);
   const regularForm = findForm(page.text, (form) => form.includes(employer) && form.includes('name="incomeId"'), "regular recurring income edit");

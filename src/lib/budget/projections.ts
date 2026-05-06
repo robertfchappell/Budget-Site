@@ -11,6 +11,7 @@ export type ProjectionInput = {
   monthlyBills: number;
   monthlyExpenses: number;
   unpaidBillsRemaining: number;
+  scheduledExpensesRemaining?: number;
   monthlySavingsTarget: number;
 };
 
@@ -25,6 +26,7 @@ export type ProjectionResult = {
   postedMonthlyIncome: number;
   scheduledMonthlyIncome: number;
   pendingIncome: number;
+  scheduledExpensesRemaining: number;
   guaranteedIncome: number;
   variableIncome: number;
   oneTimeIncome: number;
@@ -43,18 +45,16 @@ export function calculateProjection(input: ProjectionInput): ProjectionResult {
   const monthlyBills = safeNumber(input.monthlyBills);
   const monthlyExpenses = safeNumber(input.monthlyExpenses);
   const unpaidBillsRemaining = safeNumber(input.unpaidBillsRemaining);
+  const scheduledExpensesRemaining = safeNumber(input.scheduledExpensesRemaining);
   const monthlySavingsTarget = safeNumber(input.monthlySavingsTarget);
 
-  const projectedCheckingBeforeSavings =
-    checkingBalance + pendingIncome - unpaidBillsRemaining;
+  const projectedEndOfMonthBalance =
+    checkingBalance + pendingIncome - unpaidBillsRemaining - scheduledExpensesRemaining;
 
   const projectedSavings = Math.max(
     0,
-    Math.min(monthlySavingsTarget, projectedCheckingBeforeSavings)
+    Math.min(monthlySavingsTarget, projectedEndOfMonthBalance)
   );
-
-  const projectedEndOfMonthBalance =
-    projectedCheckingBeforeSavings - projectedSavings;
 
   const remainingSafeToSpend = Math.max(
     0,
@@ -66,8 +66,7 @@ export function calculateProjection(input: ProjectionInput): ProjectionResult {
   const monthlyRollover =
     scheduledMonthlyIncome -
     monthlyBills -
-    monthlyExpenses -
-    projectedSavings;
+    monthlyExpenses;
 
   return {
     projectedEndOfMonthBalance,
@@ -75,11 +74,12 @@ export function calculateProjection(input: ProjectionInput): ProjectionResult {
     totalCommittedBills: monthlyBills,
     projectedSavings,
     projectedSavingsBalance: savingsBalance + projectedSavings,
-    projectedNetCash: netCash + pendingIncome - unpaidBillsRemaining,
+    projectedNetCash: netCash + pendingIncome - unpaidBillsRemaining - scheduledExpensesRemaining,
     monthlyRollover,
     postedMonthlyIncome,
     scheduledMonthlyIncome,
     pendingIncome,
+    scheduledExpensesRemaining,
     guaranteedIncome: reliableIncome,
     variableIncome,
     oneTimeIncome

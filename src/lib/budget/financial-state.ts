@@ -1,16 +1,16 @@
 import { query } from "@/lib/db";
 import { monthBounds } from "@/lib/dates";
 import { calculateProjection } from "@/lib/budget/projections";
-import { incomeTypeLabel, normalizeIncomeType } from "@/lib/budget/income-types";
+import { buildMonthlyIncomeForecast, type IncomeForecastRow } from "@/lib/budget/income-forecast";
+import { incomeTypeLabel } from "@/lib/budget/income-types";
 import { postDueIncomeDeposits } from "@/lib/budget/income-posting";
 import { ensureBillInstancesForRange } from "@/lib/budget/recurrence";
 import { asBoolean, asNumber, asNullableString, asString } from "@/lib/coerce";
 import {
   firstTotal,
-  normalizeAccountType,
-  normalizeColor
+  normalizeAccountType
 } from "@/lib/budget/normalizers";
-import type { Account, IncomeType, IncomeTypeSummary } from "@/lib/types";
+import type { Account, IncomeTypeSummary } from "@/lib/types";
 
 type SumRow = { total: number };
 export type MonthlyFinancialRollup = {
@@ -74,8 +74,9 @@ export async function getFinancialState(
     accounts,
     monthlyRollups,
     unpaidBills,
+    scheduledExpenses,
     savings,
-    incomeByType
+    incomeForecast
   ] = await Promise.all([
     getFinancialAccounts(householdId, { postDueIncome: false }),
     getMonthlyFinancialRollups(householdId, month.startIso, month.endIso),
@@ -84,8 +85,20 @@ export async function getFinancialState(
         SELECT COALESCE(SUM(amount), 0) AS total
         FROM bill_instances
         WHERE household_id = $1
-          AND due_date < $2
+          AND due_date >= $2
+          AND due_date < $3
           AND status = 'unpaid'
+      `,
+      [householdId, month.startIso, month.endIso]
+    ),
+    query<SumRow>(
+      `
+        SELECT COALESCE(SUM(amount), 0) AS total
+        FROM expenses
+        WHERE household_id = $1
+          AND account_id IS NULL
+          AND expense_date >= CURRENT_DATE
+          AND expense_date < $2
       `,
       [householdId, month.endIso]
     ),
@@ -97,35 +110,7 @@ export async function getFinancialState(
       `,
       [householdId]
     ),
-    query<{
-      income_type: IncomeType;
-      color: string | null;
-      total: number;
-      recurring: number;
-      one_time: number;
-      guaranteed: number;
-      posted: number;
-      pending: number;
-    }>(
-      `
-        SELECT income_entries.income_type,
-               COALESCE(categories.color, '#94a3b8') AS color,
-               SUM(income_entries.deposit_amount) AS total,
-               SUM(CASE WHEN income_entries.income_frequency <> 'one_time' THEN income_entries.deposit_amount ELSE 0 END) AS recurring,
-               SUM(CASE WHEN income_entries.income_frequency = 'one_time' THEN income_entries.deposit_amount ELSE 0 END) AS one_time,
-               SUM(CASE WHEN income_entries.income_frequency <> 'one_time' AND income_entries.guaranteed = true THEN income_entries.deposit_amount ELSE 0 END) AS guaranteed,
-               SUM(CASE WHEN income_entries.balance_posted_at IS NOT NULL THEN income_entries.deposit_amount ELSE 0 END) AS posted,
-               SUM(CASE WHEN income_entries.balance_posted_at IS NULL THEN income_entries.deposit_amount ELSE 0 END) AS pending
-        FROM income_entries
-        LEFT JOIN categories ON categories.id = income_entries.category_id
-        WHERE income_entries.household_id = $1
-          AND income_entries.paycheck_date >= $2
-          AND income_entries.paycheck_date < $3
-        GROUP BY income_entries.income_type, COALESCE(categories.color, '#94a3b8')
-        ORDER BY total DESC
-      `,
-      [householdId, month.startIso, month.endIso]
-    )
+    queryIncomeForecast(householdId, month.startIso, month.endIso)
   ]);
   const currentRollup = monthlyRollups[0] ?? emptyMonthlyRollup(month.startIso);
 
@@ -152,6 +137,7 @@ export async function getFinancialState(
     monthlyBills: currentRollup.bills,
     monthlyExpenses: currentRollup.expenses,
     unpaidBillsRemaining: firstTotal(unpaidBills.rows),
+    scheduledExpensesRemaining: firstTotal(scheduledExpenses.rows),
     monthlySavingsTarget: firstTotal(savings.rows)
   });
 
@@ -173,20 +159,7 @@ export async function getFinancialState(
     monthlyExpenses: currentRollup.expenses,
     unpaidBillsRemaining: firstTotal(unpaidBills.rows),
     monthlySavingsTarget: firstTotal(savings.rows),
-    incomeByType: incomeByType.rows.map((row) => {
-      const incomeType = normalizeIncomeType(row.income_type);
-      return {
-        incomeType,
-        label: incomeTypeLabel(incomeType),
-        total: asNumber(row.total),
-        recurring: asNumber(row.recurring),
-        oneTime: asNumber(row.one_time),
-        guaranteed: asNumber(row.guaranteed),
-        posted: asNumber(row.posted),
-        pending: asNumber(row.pending),
-        color: normalizeColor(row.color)
-      };
-    }),
+    incomeByType: incomeForecast.byType,
     projection
   };
 }
@@ -196,16 +169,10 @@ export async function getMonthlyFinancialRollups(
   startIso: string,
   endIso: string
 ): Promise<MonthlyFinancialRollup[]> {
-  const result = await query<{
+  const [incomeForecast, result] = await Promise.all([
+    queryIncomeForecast(householdId, startIso, endIso),
+    query<{
     month: string;
-    income: number;
-    scheduled_income: number;
-    posted_income: number;
-    pending_income: number;
-    recurring_income: number;
-    guaranteed_income: number;
-    variable_income: number;
-    one_time_income: number;
     bills: number;
     paid_bills: number;
     unpaid_bills: number;
@@ -214,19 +181,6 @@ export async function getMonthlyFinancialRollups(
     `
       WITH months AS (
         SELECT generate_series($2::date, ($3::date - INTERVAL '1 day')::date, INTERVAL '1 month')::date AS month
-      ),
-      income AS (
-        SELECT date_trunc('month', paycheck_date)::date AS month,
-               SUM(deposit_amount) AS total,
-               SUM(CASE WHEN balance_posted_at IS NOT NULL THEN deposit_amount ELSE 0 END) AS posted,
-               SUM(CASE WHEN balance_posted_at IS NULL THEN deposit_amount ELSE 0 END) AS pending,
-               SUM(CASE WHEN income_frequency <> 'one_time' THEN deposit_amount ELSE 0 END) AS recurring,
-               SUM(CASE WHEN income_frequency <> 'one_time' AND guaranteed = true THEN deposit_amount ELSE 0 END) AS guaranteed,
-               SUM(CASE WHEN income_frequency <> 'one_time' AND guaranteed = false THEN deposit_amount ELSE 0 END) AS variable,
-               SUM(CASE WHEN income_frequency = 'one_time' THEN deposit_amount ELSE 0 END) AS one_time
-        FROM income_entries
-        WHERE household_id = $1 AND paycheck_date >= $2 AND paycheck_date < $3
-        GROUP BY 1
       ),
       bills AS (
         SELECT date_trunc('month', due_date)::date AS month,
@@ -244,47 +198,53 @@ export async function getMonthlyFinancialRollups(
         GROUP BY 1
       )
       SELECT months.month::text,
-             COALESCE(income.total, 0) AS income,
-             COALESCE(income.total, 0) AS scheduled_income,
-             COALESCE(income.posted, 0) AS posted_income,
-             COALESCE(income.pending, 0) AS pending_income,
-             COALESCE(income.recurring, 0) AS recurring_income,
-             COALESCE(income.guaranteed, 0) AS guaranteed_income,
-             COALESCE(income.variable, 0) AS variable_income,
-             COALESCE(income.one_time, 0) AS one_time_income,
              COALESCE(bills.total, 0) AS bills,
              COALESCE(bills.paid, 0) AS paid_bills,
              COALESCE(bills.unpaid, 0) AS unpaid_bills,
              COALESCE(expenses.total, 0) AS expenses
       FROM months
-      LEFT JOIN income ON income.month = months.month
       LEFT JOIN bills ON bills.month = months.month
       LEFT JOIN expenses ON expenses.month = months.month
       ORDER BY months.month
     `,
     [householdId, startIso, endIso]
-  );
+  )
+  ]);
 
-  return result.rows.map((row) => ({
-    month: row.month,
-    income: asNumber(row.income),
-    scheduledIncome: asNumber(row.scheduled_income),
-    postedIncome: asNumber(row.posted_income),
-    pendingIncome: asNumber(row.pending_income),
-    recurringIncome: asNumber(row.recurring_income),
-    guaranteedIncome: asNumber(row.guaranteed_income),
-    variableIncome: asNumber(row.variable_income),
-    oneTimeIncome: asNumber(row.one_time_income),
-    bills: asNumber(row.bills),
-    paidBills: asNumber(row.paid_bills),
-    unpaidBills: asNumber(row.unpaid_bills),
-    expenses: asNumber(row.expenses)
-  }));
+  return result.rows.map((row) => {
+    const income = incomeForecast.byMonth.get(row.month) ?? emptyIncomeTotals();
+
+    return {
+      month: row.month,
+      income: income.income,
+      scheduledIncome: income.scheduledIncome,
+      postedIncome: income.postedIncome,
+      pendingIncome: income.pendingIncome,
+      recurringIncome: income.recurringIncome,
+      guaranteedIncome: income.guaranteedIncome,
+      variableIncome: income.variableIncome,
+      oneTimeIncome: income.oneTimeIncome,
+      bills: asNumber(row.bills),
+      paidBills: asNumber(row.paid_bills),
+      unpaidBills: asNumber(row.unpaid_bills),
+      expenses: asNumber(row.expenses)
+    };
+  });
 }
 
 function emptyMonthlyRollup(month: string): MonthlyFinancialRollup {
   return {
     month,
+    ...emptyIncomeTotals(),
+    bills: 0,
+    paidBills: 0,
+    unpaidBills: 0,
+    expenses: 0
+  };
+}
+
+function emptyIncomeTotals() {
+  return {
     income: 0,
     scheduledIncome: 0,
     postedIncome: 0,
@@ -292,12 +252,37 @@ function emptyMonthlyRollup(month: string): MonthlyFinancialRollup {
     recurringIncome: 0,
     guaranteedIncome: 0,
     variableIncome: 0,
-    oneTimeIncome: 0,
-    bills: 0,
-    paidBills: 0,
-    unpaidBills: 0,
-    expenses: 0
+    oneTimeIncome: 0
   };
+}
+
+async function queryIncomeForecast(householdId: string, startIso: string, endIso: string) {
+  const result = await query<IncomeForecastRow>(
+    `
+      SELECT income_entries.id,
+             income_entries.employer,
+             income_entries.income_type,
+             income_entries.income_frequency,
+             income_entries.guaranteed,
+             income_entries.paycheck_date::text,
+             income_entries.deposit_amount,
+             income_entries.balance_posted_at::text,
+             income_entries.account_id::text,
+             COALESCE(categories.color, '#94a3b8') AS color
+      FROM income_entries
+      LEFT JOIN categories ON categories.id = income_entries.category_id
+      WHERE income_entries.household_id = $1
+        AND income_entries.paycheck_date < $3
+        AND (
+          income_entries.income_frequency <> 'one_time'
+          OR income_entries.paycheck_date >= $2
+        )
+      ORDER BY income_entries.paycheck_date ASC, income_entries.created_at ASC
+    `,
+    [householdId, startIso, endIso]
+  );
+
+  return buildMonthlyIncomeForecast(result.rows, startIso, endIso, incomeTypeLabel);
 }
 
 export async function getFinancialAccounts(
