@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    command: ["postgres", "-c", "max_connections=200"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-family_budget}
+      POSTGRES_USER: ${POSTGRES_USER:-budget}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-budget}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-budget}:${POSTGRES_PASSWORD:-budget}@postgres:5432/${POSTGRES_DB:-family_budget}
+      PGPOOL_MAX: ${PGPOOL_MAX:-4}
+      SESSION_SECRET: ${SESSION_SECRET:-replace-this-local-secret-before-production}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Family Budget}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-false}
+      SHOW_DEMO_CREDENTIALS: ${SHOW_DEMO_CREDENTIALS:-false}
+      SEED_HOUSEHOLD_NAME: ${SEED_HOUSEHOLD_NAME:-Home}
+      SEED_HUSBAND_NAME: ${SEED_HUSBAND_NAME:-Husband}
+      SEED_HUSBAND_EMAIL: ${SEED_HUSBAND_EMAIL:-husband@example.com}
+      SEED_HUSBAND_PASSWORD: ${SEED_HUSBAND_PASSWORD:-ChangeMe123!}
+      SEED_WIFE_NAME: ${SEED_WIFE_NAME:-Wife}
+      SEED_WIFE_EMAIL: ${SEED_WIFE_EMAIL:-wife@example.com}
+      SEED_WIFE_PASSWORD: ${SEED_WIFE_PASSWORD:-ChangeMe123!}
+
+volumes:
+  postgres_data:
