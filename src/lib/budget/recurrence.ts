@@ -2,7 +2,6 @@ import { addDays, addMonths, addWeeks, addYears } from "date-fns";
 import { query } from "@/lib/db";
 import { clampMonthlyDueDate, isoDate, safeDate } from "@/lib/dates";
 import { asNumber, asString } from "@/lib/coerce";
-import { dollars } from "@/lib/money";
 import type { BillFrequency } from "@/lib/types";
 
 type RecurringBillRow = {
@@ -16,6 +15,17 @@ type RecurringBillRow = {
   start_date: unknown;
   due_day: unknown;
   notes: unknown;
+};
+
+type GeneratedBillInstance = {
+  recurringBillId: string;
+  householdId: string;
+  categoryId: string | null;
+  accountId: string | null;
+  billName: string;
+  amount: number;
+  dueDate: string;
+  notes: string | null;
 };
 
 function generateDates(
@@ -98,16 +108,20 @@ function normalizeDueDay(value: unknown) {
 export async function ensureBillInstancesForRange(
   householdId: string,
   rangeStart = addDays(new Date(), -45),
-  rangeEnd = addDays(new Date(), 75)
+  rangeEnd = addDays(new Date(), 75),
+  options: { recurringBillId?: string | null } = {}
 ) {
   const bills = await query<RecurringBillRow>(
     `
       SELECT id, household_id, category_id, account_id, name, amount, frequency, start_date, due_day, notes
       FROM recurring_bills
-      WHERE household_id = $1 AND active = true
+      WHERE household_id = $1
+        AND active = true
+        AND ($2::uuid IS NULL OR id = $2)
     `,
-    [householdId]
+    [householdId, options.recurringBillId ?? null]
   );
+  const generated: GeneratedBillInstance[] = [];
 
   for (const bill of bills.rows) {
     const dates = generateDates(
@@ -119,47 +133,79 @@ export async function ensureBillInstancesForRange(
     );
 
     for (const dueDate of dates) {
-      const inserted = await query<{ id: string }>(
-        `
-          INSERT INTO bill_instances (
-            recurring_bill_id, household_id, category_id, account_id, bill_name,
-            amount, due_date, status, notes
-          )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, 'unpaid', $8)
-          ON CONFLICT (recurring_bill_id, due_date)
-          DO UPDATE SET bill_name = EXCLUDED.bill_name
-          RETURNING id
-        `,
-        [
-          bill.id,
-          bill.household_id,
-          bill.category_id,
-          bill.account_id,
-          bill.name,
-          bill.amount,
-          isoDate(dueDate),
-          bill.notes
-        ]
-      );
-
-      const billInstanceId = inserted.rows[0]?.id;
-
-      if (billInstanceId) {
-        await query(
-          `
-            INSERT INTO notifications (household_id, bill_instance_id, title, body, notify_on)
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (bill_instance_id, notify_on) DO NOTHING
-          `,
-          [
-            bill.household_id,
-            billInstanceId,
-            `${asString(bill.name, "Bill")} due`,
-            `${asString(bill.name, "Bill")} is due for ${dollars(asNumber(bill.amount))}.`,
-            isoDate(dueDate)
-          ]
-        );
-      }
+      generated.push({
+        recurringBillId: bill.id,
+        householdId: bill.household_id,
+        categoryId: bill.category_id,
+        accountId: bill.account_id,
+        billName: asString(bill.name, "Bill"),
+        amount: asNumber(bill.amount),
+        dueDate: isoDate(dueDate),
+        notes: asString(bill.notes) || null
+      });
     }
   }
+
+  await upsertBillInstances(generated);
+}
+
+async function upsertBillInstances(instances: GeneratedBillInstance[]) {
+  if (!instances.length) {
+    return;
+  }
+
+  const params: unknown[] = [];
+  const valuesSql = instances.map((instance, index) => {
+    const offset = index * 8;
+
+    params.push(
+      instance.recurringBillId,
+      instance.householdId,
+      instance.categoryId,
+      instance.accountId,
+      instance.billName,
+      instance.amount,
+      instance.dueDate,
+      instance.notes
+    );
+
+    return `($${offset + 1}::uuid, $${offset + 2}::uuid, $${offset + 3}::uuid, $${offset + 4}::uuid, $${offset + 5}::text, $${offset + 6}::numeric, $${offset + 7}::date, $${offset + 8}::text)`;
+  });
+
+  await query(
+    `
+      WITH generated (
+        recurring_bill_id, household_id, category_id, account_id,
+        bill_name, amount, due_date, notes
+      ) AS (
+        VALUES ${valuesSql.join(",\n        ")}
+      ),
+      upserted AS (
+        INSERT INTO bill_instances (
+          recurring_bill_id, household_id, category_id, account_id, bill_name,
+          amount, due_date, status, notes
+        )
+        SELECT recurring_bill_id, household_id, category_id, account_id, bill_name,
+               amount, due_date, 'unpaid', notes
+        FROM generated
+        ON CONFLICT (recurring_bill_id, due_date)
+        DO UPDATE SET
+          bill_name = EXCLUDED.bill_name,
+          amount = EXCLUDED.amount,
+          category_id = EXCLUDED.category_id,
+          account_id = EXCLUDED.account_id,
+          notes = EXCLUDED.notes
+        RETURNING id, household_id, bill_name, amount, due_date
+      )
+      INSERT INTO notifications (household_id, bill_instance_id, title, body, notify_on)
+      SELECT household_id,
+             id,
+             bill_name || ' due',
+             bill_name || ' is due for $' || to_char(amount, 'FM999,999,999,990.00') || '.',
+             due_date
+      FROM upserted
+      ON CONFLICT (bill_instance_id, notify_on) DO NOTHING
+    `,
+    params
+  );
 }

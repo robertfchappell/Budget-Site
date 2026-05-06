@@ -6,7 +6,7 @@ import { query, withTransaction } from "@/lib/db";
 import { getDashboardData } from "@/lib/budget/data";
 import { currentMonthIso } from "@/lib/budget/data";
 import { syncLinkedSavingsGoals } from "@/lib/budget/accounting";
-import { revalidateFinancialPaths } from "@/lib/budget/revalidation";
+import { financialPathGroups, revalidateFinancialPaths } from "@/lib/budget/revalidation";
 import { savingsGoalSchema } from "@/lib/validators";
 
 export async function createSavingsGoal(formData: FormData) {
@@ -44,7 +44,7 @@ export async function createSavingsGoal(formData: FormData) {
     }
   });
 
-  revalidateFinancialPaths();
+  revalidateFinancialPaths(financialPathGroups.planning);
 }
 
 export async function updateSavingsGoal(formData: FormData) {
@@ -81,7 +81,7 @@ export async function updateSavingsGoal(formData: FormData) {
     }
   });
 
-  revalidateFinancialPaths();
+  revalidateFinancialPaths(financialPathGroups.planning);
 }
 
 export async function deleteSavingsGoal(formData: FormData) {
@@ -93,7 +93,7 @@ export async function deleteSavingsGoal(formData: FormData) {
     [goalId, user.householdId]
   );
 
-  revalidateFinancialPaths();
+  revalidateFinancialPaths(financialPathGroups.planning);
 }
 
 export async function saveMonthlySnapshot() {

@@ -38,7 +38,8 @@ export async function applyAccountDelta(
     activityType,
     description,
     activityDate,
-    transferId = null
+    transferId = null,
+    syncSavingsGoal = true
   }: {
     householdId: string;
     accountId: string;
@@ -48,6 +49,7 @@ export async function applyAccountDelta(
     description: string;
     activityDate: string;
     transferId?: string | null;
+    syncSavingsGoal?: boolean;
   }
 ) {
   if (!Number.isFinite(amount) || amount === 0) {
@@ -81,7 +83,9 @@ export async function applyAccountDelta(
     description,
     activityDate
   });
-  await syncLinkedSavingsGoals(client, householdId, [accountId]);
+  if (syncSavingsGoal) {
+    await syncLinkedSavingsGoals(client, householdId, [accountId]);
+  }
 
   return asNumber(balanceAfter);
 }

@@ -15,7 +15,14 @@ import type { Account, IncomeType, IncomeTypeSummary } from "@/lib/types";
 type SumRow = { total: number };
 export type MonthlyFinancialRollup = {
   month: string;
+  /**
+   * Scheduled income is the full month view: posted deposits plus future/pending
+   * income entries dated inside the month. It is used for forecast charts.
+   */
   income: number;
+  scheduledIncome: number;
+  postedIncome: number;
+  pendingIncome: number;
   recurringIncome: number;
   guaranteedIncome: number;
   variableIncome: number;
@@ -32,7 +39,13 @@ export type FinancialState = {
   checkingBalance: number;
   savingsBalance: number;
   netCash: number;
+  /**
+   * Posted ledger income only. Dashboard cards use this so future deposits do
+   * not look like received cash.
+   */
   monthlyIncome: number;
+  scheduledMonthlyIncome: number;
+  pendingMonthlyIncome: number;
   recurringIncome: number;
   guaranteedIncome: number;
   variableIncome: number;
@@ -46,10 +59,17 @@ export type FinancialState = {
   projection: ReturnType<typeof calculateProjection>;
 };
 
-export async function getFinancialState(householdId: string): Promise<FinancialState> {
-  await ensureBillInstancesForRange(householdId);
+export async function getFinancialState(
+  householdId: string,
+  options: { ensureBills?: boolean } = {}
+): Promise<FinancialState> {
+  if (options.ensureBills ?? true) {
+    await ensureBillInstancesForRange(householdId);
+  }
 
   const month = monthBounds(new Date());
+  await postDueIncomeDeposits(householdId);
+
   const [
     accounts,
     monthlyRollups,
@@ -57,14 +77,13 @@ export async function getFinancialState(householdId: string): Promise<FinancialS
     savings,
     incomeByType
   ] = await Promise.all([
-    getFinancialAccounts(householdId),
+    getFinancialAccounts(householdId, { postDueIncome: false }),
     getMonthlyFinancialRollups(householdId, month.startIso, month.endIso),
     query<SumRow>(
       `
         SELECT COALESCE(SUM(amount), 0) AS total
         FROM bill_instances
         WHERE household_id = $1
-          AND due_date >= CURRENT_DATE
           AND due_date < $2
           AND status = 'unpaid'
       `,
@@ -85,6 +104,8 @@ export async function getFinancialState(householdId: string): Promise<FinancialS
       recurring: number;
       one_time: number;
       guaranteed: number;
+      posted: number;
+      pending: number;
     }>(
       `
         SELECT income_entries.income_type,
@@ -92,7 +113,9 @@ export async function getFinancialState(householdId: string): Promise<FinancialS
                SUM(income_entries.deposit_amount) AS total,
                SUM(CASE WHEN income_entries.income_frequency <> 'one_time' THEN income_entries.deposit_amount ELSE 0 END) AS recurring,
                SUM(CASE WHEN income_entries.income_frequency = 'one_time' THEN income_entries.deposit_amount ELSE 0 END) AS one_time,
-               SUM(CASE WHEN income_entries.income_frequency <> 'one_time' AND income_entries.guaranteed = true THEN income_entries.deposit_amount ELSE 0 END) AS guaranteed
+               SUM(CASE WHEN income_entries.income_frequency <> 'one_time' AND income_entries.guaranteed = true THEN income_entries.deposit_amount ELSE 0 END) AS guaranteed,
+               SUM(CASE WHEN income_entries.balance_posted_at IS NOT NULL THEN income_entries.deposit_amount ELSE 0 END) AS posted,
+               SUM(CASE WHEN income_entries.balance_posted_at IS NULL THEN income_entries.deposit_amount ELSE 0 END) AS pending
         FROM income_entries
         LEFT JOIN categories ON categories.id = income_entries.category_id
         WHERE income_entries.household_id = $1
@@ -120,7 +143,9 @@ export async function getFinancialState(householdId: string): Promise<FinancialS
     checkingBalance,
     savingsBalance,
     netCash,
-    monthlyIncome: currentRollup.income,
+    monthlyIncome: currentRollup.scheduledIncome,
+    postedMonthlyIncome: currentRollup.postedIncome,
+    pendingIncome: currentRollup.pendingIncome,
     guaranteedIncome: currentRollup.guaranteedIncome,
     variableIncome: currentRollup.variableIncome,
     oneTimeIncome: currentRollup.oneTimeIncome,
@@ -136,7 +161,9 @@ export async function getFinancialState(householdId: string): Promise<FinancialS
     checkingBalance,
     savingsBalance,
     netCash,
-    monthlyIncome: currentRollup.income,
+    monthlyIncome: currentRollup.postedIncome,
+    scheduledMonthlyIncome: currentRollup.scheduledIncome,
+    pendingMonthlyIncome: currentRollup.pendingIncome,
     recurringIncome: currentRollup.recurringIncome,
     guaranteedIncome: currentRollup.guaranteedIncome,
     variableIncome: currentRollup.variableIncome,
@@ -155,6 +182,8 @@ export async function getFinancialState(householdId: string): Promise<FinancialS
         recurring: asNumber(row.recurring),
         oneTime: asNumber(row.one_time),
         guaranteed: asNumber(row.guaranteed),
+        posted: asNumber(row.posted),
+        pending: asNumber(row.pending),
         color: normalizeColor(row.color)
       };
     }),
@@ -170,6 +199,9 @@ export async function getMonthlyFinancialRollups(
   const result = await query<{
     month: string;
     income: number;
+    scheduled_income: number;
+    posted_income: number;
+    pending_income: number;
     recurring_income: number;
     guaranteed_income: number;
     variable_income: number;
@@ -186,6 +218,8 @@ export async function getMonthlyFinancialRollups(
       income AS (
         SELECT date_trunc('month', paycheck_date)::date AS month,
                SUM(deposit_amount) AS total,
+               SUM(CASE WHEN balance_posted_at IS NOT NULL THEN deposit_amount ELSE 0 END) AS posted,
+               SUM(CASE WHEN balance_posted_at IS NULL THEN deposit_amount ELSE 0 END) AS pending,
                SUM(CASE WHEN income_frequency <> 'one_time' THEN deposit_amount ELSE 0 END) AS recurring,
                SUM(CASE WHEN income_frequency <> 'one_time' AND guaranteed = true THEN deposit_amount ELSE 0 END) AS guaranteed,
                SUM(CASE WHEN income_frequency <> 'one_time' AND guaranteed = false THEN deposit_amount ELSE 0 END) AS variable,
@@ -211,6 +245,9 @@ export async function getMonthlyFinancialRollups(
       )
       SELECT months.month::text,
              COALESCE(income.total, 0) AS income,
+             COALESCE(income.total, 0) AS scheduled_income,
+             COALESCE(income.posted, 0) AS posted_income,
+             COALESCE(income.pending, 0) AS pending_income,
              COALESCE(income.recurring, 0) AS recurring_income,
              COALESCE(income.guaranteed, 0) AS guaranteed_income,
              COALESCE(income.variable, 0) AS variable_income,
@@ -231,6 +268,9 @@ export async function getMonthlyFinancialRollups(
   return result.rows.map((row) => ({
     month: row.month,
     income: asNumber(row.income),
+    scheduledIncome: asNumber(row.scheduled_income),
+    postedIncome: asNumber(row.posted_income),
+    pendingIncome: asNumber(row.pending_income),
     recurringIncome: asNumber(row.recurring_income),
     guaranteedIncome: asNumber(row.guaranteed_income),
     variableIncome: asNumber(row.variable_income),
@@ -246,6 +286,9 @@ function emptyMonthlyRollup(month: string): MonthlyFinancialRollup {
   return {
     month,
     income: 0,
+    scheduledIncome: 0,
+    postedIncome: 0,
+    pendingIncome: 0,
     recurringIncome: 0,
     guaranteedIncome: 0,
     variableIncome: 0,
@@ -257,8 +300,13 @@ function emptyMonthlyRollup(month: string): MonthlyFinancialRollup {
   };
 }
 
-export async function getFinancialAccounts(householdId: string) {
-  await postDueIncomeDeposits(householdId);
+export async function getFinancialAccounts(
+  householdId: string,
+  options: { postDueIncome?: boolean } = {}
+) {
+  if (options.postDueIncome ?? true) {
+    await postDueIncomeDeposits(householdId);
+  }
 
   const result = await query<{
     id: string;

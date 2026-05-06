@@ -1,6 +1,14 @@
 import { z } from "zod";
 
-const money = z.coerce.number().finite().min(0).default(0);
+const cleanNumericInput = (value: unknown) => {
+  if (typeof value === "string") {
+    return value.replace(/[$,\s]/g, "");
+  }
+
+  return value;
+};
+const money = z.preprocess(cleanNumericInput, z.coerce.number().finite().min(0).default(0));
+const signedMoney = z.preprocess(cleanNumericInput, z.coerce.number().finite());
 const optionalInt = (min: number, max: number) =>
   z.preprocess(
     (value) => (value === "" || value == null ? undefined : value),
@@ -75,13 +83,13 @@ export const savingsGoalSchema = z.object({
 
 export const accountBalanceSchema = z.object({
   accountId: z.string().uuid(),
-  currentBalance: z.coerce.number().finite()
+  currentBalance: signedMoney
 });
 
 export const accountSchema = z.object({
   accountName: z.string().trim().min(1, "Account name is required."),
   accountType: z.enum(["checking", "savings", "credit", "cash"]),
-  currentBalance: z.coerce.number().finite().default(0),
+  currentBalance: signedMoney.default(0),
   institution: z.string().trim().optional().or(z.literal("")),
   includeInSafeToSpend: z.coerce.boolean().default(true)
 });
@@ -93,7 +101,7 @@ export const deleteAccountSchema = z.object({
 export const transferSchema = z.object({
   fromAccountId: z.string().uuid(),
   toAccountId: z.string().uuid(),
-  amount: z.coerce.number().finite().positive(),
+  amount: z.preprocess(cleanNumericInput, z.coerce.number().finite().positive()),
   transferDate: z.string().min(1),
   notes: z.string().trim().optional()
 });

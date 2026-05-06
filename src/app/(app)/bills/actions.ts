@@ -2,8 +2,8 @@
 
 import { requireUser } from "@/lib/auth";
 import { query, withTransaction } from "@/lib/db";
-import { applyAccountDelta } from "@/lib/budget/accounting";
-import { revalidateFinancialPaths } from "@/lib/budget/revalidation";
+import { applyAccountDelta, syncLinkedSavingsGoals } from "@/lib/budget/accounting";
+import { financialPathGroups, revalidateFinancialPaths } from "@/lib/budget/revalidation";
 import { ensureBillInstancesForRange } from "@/lib/budget/recurrence";
 import { isoDate, safeIsoDate, todayIso } from "@/lib/dates";
 import { billInstanceSchema, recurringBillSchema } from "@/lib/validators";
@@ -69,8 +69,8 @@ export async function createRecurringBill(formData: FormData) {
     );
   }
 
-  await ensureBillInstancesForRange(user.householdId);
-  revalidateFinancialPaths();
+  await ensureBillInstancesForRange(user.householdId, undefined, undefined, { recurringBillId: billId });
+  revalidateFinancialPaths(financialPathGroups.bills);
 }
 
 export async function updateRecurringBill(formData: FormData) {
@@ -125,9 +125,9 @@ export async function updateRecurringBill(formData: FormData) {
     [billId, user.householdId]
   );
 
-  await ensureBillInstancesForRange(user.householdId);
+  await ensureBillInstancesForRange(user.householdId, undefined, undefined, { recurringBillId: billId });
 
-  revalidateFinancialPaths();
+  revalidateFinancialPaths(financialPathGroups.bills);
 }
 
 export async function archiveRecurringBill(formData: FormData) {
@@ -143,7 +143,7 @@ export async function archiveRecurringBill(formData: FormData) {
     [billId, user.householdId]
   );
 
-  revalidateFinancialPaths();
+  revalidateFinancialPaths(financialPathGroups.bills);
 }
 
 export async function deleteRecurringBill(formData: FormData) {
@@ -155,7 +155,7 @@ export async function deleteRecurringBill(formData: FormData) {
     [billId, user.householdId]
   );
 
-  revalidateFinancialPaths();
+  revalidateFinancialPaths(financialPathGroups.bills);
 }
 
 export async function updateBillInstance(formData: FormData) {
@@ -217,7 +217,8 @@ export async function updateBillInstance(formData: FormData) {
           amount: current.amount,
           activityType: "bill_payment",
           description: `Bill edit reversal: ${current.bill_name}`,
-          activityDate: values.dueDate
+          activityDate: values.dueDate,
+          syncSavingsGoal: false
         });
       }
 
@@ -229,13 +230,20 @@ export async function updateBillInstance(formData: FormData) {
           amount: -values.amount,
           activityType: "bill_payment",
           description: `Bill payment: ${values.billName}`,
-          activityDate: values.dueDate
+          activityDate: values.dueDate,
+          syncSavingsGoal: false
         });
+      }
+
+      const accountIds = [...new Set([current.account_id, values.accountId].filter(Boolean))] as string[];
+
+      if (accountIds.length) {
+        await syncLinkedSavingsGoals(client, user.householdId, accountIds);
       }
     }
   });
 
-  revalidateFinancialPaths();
+  revalidateFinancialPaths(financialPathGroups.bills);
 }
 
 export async function deleteBillInstance(formData: FormData) {
@@ -283,7 +291,7 @@ export async function deleteBillInstance(formData: FormData) {
     );
   });
 
-  revalidateFinancialPaths();
+  revalidateFinancialPaths(financialPathGroups.bills);
 }
 
 export async function markBillPaid(formData: FormData) {
@@ -332,7 +340,7 @@ export async function markBillPaid(formData: FormData) {
     }
   });
 
-  revalidateFinancialPaths();
+  revalidateFinancialPaths(financialPathGroups.bills);
 }
 
 export async function markBillUnpaid(formData: FormData) {
@@ -381,7 +389,7 @@ export async function markBillUnpaid(formData: FormData) {
     }
   });
 
-  revalidateFinancialPaths();
+  revalidateFinancialPaths(financialPathGroups.bills);
 }
 
 function resolveBillSchedule(values: {

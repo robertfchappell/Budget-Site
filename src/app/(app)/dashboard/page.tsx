@@ -68,7 +68,7 @@ export default async function DashboardPage() {
           value={data.netCash}
         />
         <StatCard
-          detail="Deposits recorded this month"
+          detail="Posted deposits this month"
           icon={Banknote}
           title="Monthly Income"
           tone="teal"
@@ -170,7 +170,7 @@ export default async function DashboardPage() {
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold text-white">Cashflow Summary</h2>
-              <p className="text-sm text-slate-400">Income, bills, and expenses</p>
+              <p className="text-sm text-slate-400">Scheduled income, bills, and recorded expenses</p>
             </div>
             <CircleDollarSign aria-hidden className="text-teal-300" size={20} />
           </div>
@@ -269,12 +269,15 @@ export default async function DashboardPage() {
         <article className="panel p-4">
           <h2 className="text-lg font-bold text-white">Monthly Outlook</h2>
           <p className="mt-1 text-sm text-slate-400">
-            Actual balances come from accounts. Forecast values layer in pending unpaid bills and planned savings.
+            Actual balances come from accounts. Forecast values add pending deposits, unpaid bills, and planned savings.
           </p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <Metric label="Forecast Checking" value={data.projection.projectedEndOfMonthBalance} />
             <Metric label="Forecast Savings" value={data.projection.projectedSavingsBalance} />
             <Metric label="Forecast Net Cash" value={data.projection.projectedNetCash} />
+            <Metric label="Posted Income" value={data.projection.postedMonthlyIncome} />
+            <Metric label="Scheduled Income" value={data.projection.scheduledMonthlyIncome} />
+            <Metric label="Pending Deposits" value={data.projection.pendingIncome} />
             <Metric label="Recurring Bills" value={data.projection.totalCommittedBills} />
             <Metric label="Recorded Expenses" value={data.monthlyExpenses} />
             <Metric label="Planned Savings" value={data.projection.projectedSavings} />
@@ -291,7 +294,7 @@ export default async function DashboardPage() {
                       <span className="font-bold text-teal-200">{dollars(item.total)}</span>
                     </div>
                     <p className="mt-1 text-xs text-slate-400">
-                      {dollars(item.recurring)} recurring - {dollars(item.oneTime)} one-time
+                      {dollars(item.posted)} posted - {dollars(item.pending)} pending
                     </p>
                   </div>
                 ))

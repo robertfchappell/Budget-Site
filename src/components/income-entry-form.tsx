@@ -4,6 +4,7 @@ import { type FormEvent, useRef, useState } from "react";
 import { Banknote, ChevronDown, Save } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createIncomeEntry, updateIncomeEntry } from "@/app/(app)/income/actions";
+import { MoneyInput } from "@/components/money-input";
 import { defaultFrequencyForIncomeType, incomeTypeOptions } from "@/lib/budget/income-types";
 import { todayIso } from "@/lib/dates";
 import type { Account, IncomeEntry, IncomeFrequency, IncomeType } from "@/lib/types";
@@ -264,13 +265,11 @@ export function IncomeEntryForm({
           <input name="employer" type="hidden" value="" />
         )}
 
-        <Field
+        <MoneyInput
           defaultValue={entry?.depositAmount}
           label={preset.amountLabel}
           name="depositAmount"
           required
-          step="0.01"
-          type="number"
         />
 
         {preset.showTerm ? (
@@ -328,10 +327,10 @@ export function IncomeEntryForm({
               <ChevronDown aria-hidden size={16} />
             </summary>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <Field defaultValue={entry?.basePay} label="Gross pay" name="basePay" step="0.01" type="number" />
-              <Field defaultValue={entry?.taxesWithheld} label="Taxes withheld" name="taxesWithheld" step="0.01" type="number" />
-              <Field defaultValue={entry?.overtimePay} label="Overtime" name="overtimePay" step="0.01" type="number" />
-              <Field defaultValue={entry?.bonusPay} label="Bonus" name="bonusPay" step="0.01" type="number" />
+              <MoneyInput defaultValue={entry?.basePay} label="Gross pay" name="basePay" />
+              <MoneyInput defaultValue={entry?.taxesWithheld} label="Taxes withheld" name="taxesWithheld" />
+              <MoneyInput defaultValue={entry?.overtimePay} label="Overtime" name="overtimePay" />
+              <MoneyInput defaultValue={entry?.bonusPay} label="Bonus" name="bonusPay" />
               <input name="vaIncome" type="hidden" value="0" />
             </div>
           </details>

@@ -25,7 +25,7 @@ services:
       - "3000:3000"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-budget}:${POSTGRES_PASSWORD:-budget}@postgres:5432/${POSTGRES_DB:-family_budget}
-      PGPOOL_MAX: ${PGPOOL_MAX:-4}
+      PGPOOL_MAX: ${PGPOOL_MAX:-10}
       SESSION_SECRET: ${SESSION_SECRET:-replace-this-local-secret-before-production}
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-auto}
       AUTH_LOG_LEVEL: ${AUTH_LOG_LEVEL:-info}

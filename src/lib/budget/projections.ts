@@ -3,6 +3,8 @@ export type ProjectionInput = {
   savingsBalance: number;
   netCash: number;
   monthlyIncome: number;
+  postedMonthlyIncome: number;
+  pendingIncome: number;
   guaranteedIncome: number;
   variableIncome: number;
   oneTimeIncome: number;
@@ -20,6 +22,9 @@ export type ProjectionResult = {
   projectedSavingsBalance: number;
   projectedNetCash: number;
   monthlyRollover: number;
+  postedMonthlyIncome: number;
+  scheduledMonthlyIncome: number;
+  pendingIncome: number;
   guaranteedIncome: number;
   variableIncome: number;
   oneTimeIncome: number;
@@ -29,6 +34,9 @@ export function calculateProjection(input: ProjectionInput): ProjectionResult {
   const checkingBalance = safeNumber(input.checkingBalance);
   const savingsBalance = safeNumber(input.savingsBalance);
   const netCash = safeNumber(input.netCash);
+  const scheduledMonthlyIncome = safeNumber(input.monthlyIncome);
+  const postedMonthlyIncome = safeNumber(input.postedMonthlyIncome);
+  const pendingIncome = safeNumber(input.pendingIncome);
   const guaranteedIncome = safeNumber(input.guaranteedIncome);
   const variableIncome = safeNumber(input.variableIncome);
   const oneTimeIncome = safeNumber(input.oneTimeIncome);
@@ -37,25 +45,26 @@ export function calculateProjection(input: ProjectionInput): ProjectionResult {
   const unpaidBillsRemaining = safeNumber(input.unpaidBillsRemaining);
   const monthlySavingsTarget = safeNumber(input.monthlySavingsTarget);
 
-  const projectedEndOfMonthBalance =
-    checkingBalance - unpaidBillsRemaining;
+  const projectedCheckingBeforeSavings =
+    checkingBalance + pendingIncome - unpaidBillsRemaining;
 
   const projectedSavings = Math.max(
     0,
-    Math.min(monthlySavingsTarget, projectedEndOfMonthBalance)
+    Math.min(monthlySavingsTarget, projectedCheckingBeforeSavings)
   );
+
+  const projectedEndOfMonthBalance =
+    projectedCheckingBeforeSavings - projectedSavings;
 
   const remainingSafeToSpend = Math.max(
     0,
-    projectedEndOfMonthBalance - projectedSavings
+    projectedEndOfMonthBalance
   );
 
   const reliableIncome = guaranteedIncome;
-  const supplementalIncome = variableIncome + oneTimeIncome;
 
   const monthlyRollover =
-    reliableIncome +
-    supplementalIncome -
+    scheduledMonthlyIncome -
     monthlyBills -
     monthlyExpenses -
     projectedSavings;
@@ -66,8 +75,11 @@ export function calculateProjection(input: ProjectionInput): ProjectionResult {
     totalCommittedBills: monthlyBills,
     projectedSavings,
     projectedSavingsBalance: savingsBalance + projectedSavings,
-    projectedNetCash: netCash - unpaidBillsRemaining,
+    projectedNetCash: netCash + pendingIncome - unpaidBillsRemaining,
     monthlyRollover,
+    postedMonthlyIncome,
+    scheduledMonthlyIncome,
+    pendingIncome,
     guaranteedIncome: reliableIncome,
     variableIncome,
     oneTimeIncome

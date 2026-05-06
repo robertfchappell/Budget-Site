@@ -43,6 +43,26 @@ function inputValue(formHtml, name) {
   return decodeHtml(inputMatch.match(/value="([^"]*)"/)?.[1] ?? "");
 }
 
+function moneyNumber(value) {
+  return Number(String(value ?? "").replace(/[$,\s]/g, ""));
+}
+
+function plainText(html) {
+  return decodeHtml(String(html ?? "").replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
+}
+
+function moneyAfterLabel(html, label) {
+  const text = plainText(html);
+  const index = text.indexOf(label);
+
+  assert(index >= 0, `Could not find label ${label}`);
+
+  const value = text.slice(index, index + 240).match(/\$[0-9,]+(?:\.\d{2})?/);
+
+  assert(value, `Could not find money value after ${label}`);
+  return value[0];
+}
+
 function firstCookie(response) {
   const cookies = response.headers.getSetCookie?.() ?? [];
   return (cookies[0] || response.headers.get("set-cookie") || "").split(";")[0];
@@ -82,8 +102,8 @@ function assert(condition, message) {
 }
 
 function assertMoney(actual, expected, label) {
-  const roundedActual = Math.round(Number(actual) * 100);
-  const roundedExpected = Math.round(Number(expected) * 100);
+  const roundedActual = Math.round(moneyNumber(actual) * 100);
+  const roundedExpected = Math.round(moneyNumber(expected) * 100);
   assert(roundedActual === roundedExpected, `${label}: expected ${expected}, got ${actual}`);
 }
 
@@ -144,8 +164,8 @@ async function balances(cookie) {
   return {
     checkingId: inputValue(checking, "accountId"),
     savingsId: inputValue(savings, "accountId"),
-    checking: Number(inputValue(checking, "currentBalance")),
-    savings: Number(inputValue(savings, "currentBalance"))
+    checking: moneyNumber(inputValue(checking, "currentBalance")),
+    savings: moneyNumber(inputValue(savings, "currentBalance"))
   };
 }
 
@@ -183,7 +203,7 @@ async function verifyAccountManagement(cookie) {
   page = await get("/settings", cookie);
   assert(page.text.includes(accountName), "Created account should appear in settings");
   const accountForm = findForm(page.text, (form) => form.includes(accountName) && form.includes('name="accountId"'), "created account row");
-  assertMoney(Number(inputValue(accountForm, "currentBalance")), 42, "Created account balance");
+  assertMoney(moneyNumber(inputValue(accountForm, "currentBalance")), 42, "Created account balance");
   const accountId = inputValue(accountForm, "accountId");
 
   const deleteForm = findForm(
@@ -321,6 +341,9 @@ async function verifyFutureIncomePosting(cookie, checkingId) {
 
   const dashboard = await get("/dashboard", cookie);
   assert(dashboard.text.includes(employer), "Future-dated income should render as an upcoming deposit");
+  assertMoney(moneyAfterLabel(dashboard.text, "Monthly Income"), 0, "Future income should not count as posted monthly income");
+  assertMoney(moneyAfterLabel(dashboard.text, "Scheduled Income"), 400, "Forecast should include future scheduled income");
+  assertMoney(moneyAfterLabel(dashboard.text, "Pending Deposits"), 400, "Forecast should show future income as pending deposits");
 
   page = await get("/income", cookie);
   const editForm = findForm(page.text, (form) => form.includes(employer) && form.includes('name="incomeId"'), "future income edit");
@@ -344,6 +367,8 @@ async function verifyFutureIncomePosting(cookie, checkingId) {
     notes: "posted today"
   });
   assertMoney((await balances(cookie)).checking, 1400, "Changing future income to today should post checking");
+  const dashboardAfterPosting = await get("/dashboard", cookie);
+  assertMoney(moneyAfterLabel(dashboardAfterPosting.text, "Monthly Income"), 400, "Posted income should count as monthly income");
 
   page = await get("/income", cookie);
   const deleteForm = findForm(page.text, (form) => form.includes(`value="${incomeId}"`) && form.includes("Delete"), "future income delete");

@@ -3,8 +3,8 @@
 import Papa from "papaparse";
 import { requireUser } from "@/lib/auth";
 import { query, withTransaction } from "@/lib/db";
-import { applyAccountDelta } from "@/lib/budget/accounting";
-import { revalidateFinancialPaths } from "@/lib/budget/revalidation";
+import { applyAccountDelta, syncLinkedSavingsGoals } from "@/lib/budget/accounting";
+import { financialPathGroups, revalidateFinancialPaths } from "@/lib/budget/revalidation";
 import { expenseSchema } from "@/lib/validators";
 import type { PaymentMethod } from "@/lib/types";
 
@@ -49,7 +49,7 @@ export async function createExpense(formData: FormData) {
     }
   });
 
-  revalidateFinancialPaths();
+  revalidateFinancialPaths(financialPathGroups.expenses);
 }
 
 export async function updateExpense(formData: FormData) {
@@ -115,7 +115,8 @@ export async function updateExpense(formData: FormData) {
         amount: current.amount,
         activityType: "expense",
         description: `Expense edit reversal: ${current.merchant}`,
-        activityDate: values.expenseDate
+        activityDate: values.expenseDate,
+        syncSavingsGoal: false
       });
     }
 
@@ -127,12 +128,19 @@ export async function updateExpense(formData: FormData) {
         amount: -values.amount,
         activityType: "expense",
         description: `Expense: ${values.merchant}`,
-        activityDate: values.expenseDate
+        activityDate: values.expenseDate,
+        syncSavingsGoal: false
       });
+    }
+
+    const accountIds = [...new Set([current.account_id, values.accountId].filter(Boolean))] as string[];
+
+    if (accountIds.length) {
+      await syncLinkedSavingsGoals(client, user.householdId, accountIds);
     }
   });
 
-  revalidateFinancialPaths();
+  revalidateFinancialPaths(financialPathGroups.expenses);
 }
 
 export async function deleteExpense(formData: FormData) {
@@ -179,7 +187,7 @@ export async function deleteExpense(formData: FormData) {
     }
   });
 
-  revalidateFinancialPaths();
+  revalidateFinancialPaths(financialPathGroups.expenses);
 }
 
 export async function importExpensesCsv(formData: FormData) {
@@ -250,7 +258,7 @@ export async function importExpensesCsv(formData: FormData) {
     }
   });
 
-  revalidateFinancialPaths();
+  revalidateFinancialPaths(financialPathGroups.expenses);
 }
 
 async function findCategoryName(householdId: string, categoryId: string | null) {

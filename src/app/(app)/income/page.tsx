@@ -6,6 +6,7 @@ import { IncomeEntryForm } from "@/components/income-entry-form";
 import { deleteIncomeEntry } from "@/app/(app)/income/actions";
 import { getIncomePageData } from "@/lib/budget/data";
 import { requireUser } from "@/lib/auth";
+import { incomeStatusLabel } from "@/lib/budget/income-status";
 import { incomeTypeOptions } from "@/lib/budget/income-types";
 import { displayDate } from "@/lib/dates";
 import { incomeFrequencyDisplayLabel } from "@/lib/display-labels";
@@ -69,7 +70,7 @@ export default async function IncomePage({
                   <span className="font-bold text-teal-200">{dollars(item.total)}</span>
                 </div>
                 <p className="mt-1 text-xs text-slate-400">
-                  {dollars(item.recurring)} recurring - {dollars(item.oneTime)} one-time
+                  {dollars(item.posted)} posted - {dollars(item.pending)} pending
                 </p>
               </div>
             ))}
@@ -86,13 +87,14 @@ export default async function IncomePage({
           <Banknote aria-hidden className="text-teal-300" size={20} />
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left text-sm">
+          <table className="w-full min-w-[860px] text-left text-sm">
             <thead className="bg-slate-950/60 text-xs uppercase text-slate-500">
               <tr>
                 <th className="table-cell">Date</th>
                 <th className="table-cell">Type</th>
                 <th className="table-cell">Details</th>
                 <th className="table-cell">Repeat</th>
+                <th className="table-cell">Status</th>
                 <th className="table-cell">Account</th>
                 <th className="table-cell">Amount</th>
                 <th className="table-cell">By</th>
@@ -112,6 +114,11 @@ export default async function IncomePage({
                   </td>
                   <td className="table-cell text-slate-300">
                     {incomeFrequencyDisplayLabel(entry.incomeFrequency)}
+                  </td>
+                  <td className="table-cell">
+                    <span className={`badge ${statusTone(entry.status)}`}>
+                      {incomeStatusLabel(entry.status)}
+                    </span>
                   </td>
                   <td className="table-cell text-slate-300">{entry.accountName ?? "Not linked"}</td>
                   <td className="table-cell font-bold text-teal-200">{dollars(entry.depositAmount)}</td>
@@ -135,7 +142,7 @@ export default async function IncomePage({
               ))}
               {!data.entries.length ? (
                 <tr>
-                  <td className="table-cell text-slate-400" colSpan={8}>
+                  <td className="table-cell text-slate-400" colSpan={9}>
                     No income entries match this filter.
                   </td>
                 </tr>
@@ -162,4 +169,16 @@ function incomeDetail(entry: { incomeType: string; employer: string }) {
   }
 
   return entry.employer;
+}
+
+function statusTone(status: string) {
+  if (status === "posted") {
+    return "border-teal-400/35 bg-teal-400/10 text-teal-100";
+  }
+
+  if (status === "scheduled") {
+    return "border-sky-400/35 bg-sky-400/10 text-sky-100";
+  }
+
+  return "border-amber-400/35 bg-amber-400/10 text-amber-100";
 }

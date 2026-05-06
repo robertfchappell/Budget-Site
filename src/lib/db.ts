@@ -15,7 +15,7 @@ function createPool() {
 
   return new Pool({
     connectionString,
-    max: Number(process.env.PGPOOL_MAX ?? 4),
+    max: Number(process.env.PGPOOL_MAX ?? 10),
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
     allowExitOnIdle: true

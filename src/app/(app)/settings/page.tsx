@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createAccount, deleteAccount, transferFunds, updateAccountBalance } from "@/app/(app)/settings/actions";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { HouseholdInvites } from "@/components/household-invites";
+import { MoneyInput } from "@/components/money-input";
 import { getSettingsPageData } from "@/lib/budget/data";
 import { requireUser } from "@/lib/auth";
 import { displayDate, todayIso } from "@/lib/dates";
@@ -63,7 +64,7 @@ export default async function SettingsPage() {
                   <option value="credit">Credit</option>
                 </select>
               </div>
-              <Field label="Current balance" name="currentBalance" required step="0.01" type="number" />
+              <MoneyInput allowNegative label="Current balance" name="currentBalance" required />
               <Field label="Institution" name="institution" placeholder="Manual" />
               <input name="includeInSafeToSpend" type="hidden" value="true" />
             </div>
@@ -91,13 +92,11 @@ export default async function SettingsPage() {
                         {accountTypeDisplayLabel(account.type)} - {account.institution ?? "Manual"}
                       </p>
                     </div>
-                    <input
+                    <MoneyInput
+                      allowNegative
                       aria-label={`${account.name} current balance`}
-                      className="field"
                       defaultValue={account.currentBalance}
                       name="currentBalance"
-                      step="0.01"
-                      type="number"
                     />
                     <button aria-label={`Save ${account.name}`} className="secondary-button" type="submit">
                       <Save aria-hidden size={16} />
@@ -156,7 +155,7 @@ export default async function SettingsPage() {
                     ))}
                   </select>
                 </div>
-                <Field label="Amount" name="amount" required step="0.01" type="number" />
+                <MoneyInput label="Amount" name="amount" required />
                 <Field defaultValue={todayIso()} label="Date" name="transferDate" required type="date" />
                 <div className="sm:col-span-2 xl:col-span-1">
                   <label className="label" htmlFor="notes">

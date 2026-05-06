@@ -2,6 +2,7 @@ import { Download, Plus, ReceiptText, Save, Trash2, Upload } from "lucide-react"
 import Link from "next/link";
 import { BudgetTrendChart, CategoryDonut } from "@/components/charts";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { MoneyInput } from "@/components/money-input";
 import { createExpense, deleteExpense, importExpensesCsv, updateExpense } from "@/app/(app)/expenses/actions";
 import { getExpensesPageData } from "@/lib/budget/data";
 import { requireUser } from "@/lib/auth";
@@ -33,7 +34,7 @@ export default async function ExpensesPage() {
             <h2 className="text-lg font-bold text-white">Quick Expense</h2>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Amount" name="amount" required step="0.01" type="number" />
+            <MoneyInput label="Amount" name="amount" required />
             <Field label="Merchant" name="merchant" required />
             <div>
               <label className="label" htmlFor="categoryId">
@@ -172,7 +173,7 @@ export default async function ExpensesPage() {
                       <div className="mt-3 w-[min(680px,calc(100vw-3rem))] rounded-md border border-slate-800 bg-slate-950 p-3">
                         <form action={updateExpense} className="grid gap-3 sm:grid-cols-2">
                           <input name="expenseId" type="hidden" value={expense.id} />
-                          <Field defaultValue={expense.amount} label="Amount" name="amount" required step="0.01" type="number" />
+                          <MoneyInput defaultValue={expense.amount} label="Amount" name="amount" required />
                           <Field defaultValue={expense.merchant} label="Merchant" name="merchant" required />
                           <select className="field" defaultValue={expense.categoryId ?? ""} name="categoryId">
                             <option value="">Uncategorized</option>

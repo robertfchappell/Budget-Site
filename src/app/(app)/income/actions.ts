@@ -2,9 +2,9 @@
 
 import { requireUser } from "@/lib/auth";
 import { withTransaction } from "@/lib/db";
-import { applyAccountDelta } from "@/lib/budget/accounting";
+import { applyAccountDelta, syncLinkedSavingsGoals } from "@/lib/budget/accounting";
 import { shouldPostToBalance } from "@/lib/budget/income-posting";
-import { revalidateFinancialPaths } from "@/lib/budget/revalidation";
+import { financialPathGroups, revalidateFinancialPaths } from "@/lib/budget/revalidation";
 import { todayIso } from "@/lib/dates";
 import {
   defaultGuaranteedForIncomeType,
@@ -72,7 +72,7 @@ export async function createIncomeEntry(formData: FormData) {
     }
   });
 
-  revalidateFinancialPaths();
+  revalidateFinancialPaths(financialPathGroups.income);
 }
 
 export async function updateIncomeEntry(formData: FormData) {
@@ -159,7 +159,8 @@ export async function updateIncomeEntry(formData: FormData) {
         amount: -current.deposit_amount,
         activityType: "income_deposit",
         description: `Income edit reversal: ${current.employer}`,
-        activityDate: values.paycheckDate
+        activityDate: values.paycheckDate,
+        syncSavingsGoal: false
       });
     }
 
@@ -171,13 +172,20 @@ export async function updateIncomeEntry(formData: FormData) {
         amount: values.depositAmount,
         activityType: "income_deposit",
         description: `Income: ${values.employer}`,
-        activityDate: values.paycheckDate
+        activityDate: values.paycheckDate,
+        syncSavingsGoal: false
       });
       await markIncomePosted(client, incomeId, user.householdId);
     }
+
+    const accountIds = [...new Set([current.account_id, values.accountId].filter(Boolean))] as string[];
+
+    if (accountIds.length) {
+      await syncLinkedSavingsGoals(client, user.householdId, accountIds);
+    }
   });
 
-  revalidateFinancialPaths();
+  revalidateFinancialPaths(financialPathGroups.income);
 }
 
 export async function deleteIncomeEntry(formData: FormData) {
@@ -225,7 +233,7 @@ export async function deleteIncomeEntry(formData: FormData) {
     }
   });
 
-  revalidateFinancialPaths();
+  revalidateFinancialPaths(financialPathGroups.income);
 }
 
 async function markIncomePosted(

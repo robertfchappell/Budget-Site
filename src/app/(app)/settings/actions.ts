@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { withTransaction } from "@/lib/db";
-import { applyAccountDelta, setAccountBalance } from "@/lib/budget/accounting";
-import { revalidateFinancialPaths } from "@/lib/budget/revalidation";
+import { applyAccountDelta, setAccountBalance, syncLinkedSavingsGoals } from "@/lib/budget/accounting";
+import { financialPathGroups, revalidateFinancialPaths } from "@/lib/budget/revalidation";
 import { todayIso } from "@/lib/dates";
 import { createInviteToken, hashInviteToken, inviteUrl } from "@/lib/households/invites";
 import {
@@ -82,7 +82,7 @@ export async function createAccount(formData: FormData) {
     });
   });
 
-  revalidateFinancialPaths();
+  revalidateFinancialPaths(financialPathGroups.settings);
 }
 
 export async function updateAccountBalance(formData: FormData) {
@@ -100,7 +100,7 @@ export async function updateAccountBalance(formData: FormData) {
     });
   });
 
-  revalidateFinancialPaths();
+  revalidateFinancialPaths(financialPathGroups.settings);
 }
 
 export async function deleteAccount(formData: FormData) {
@@ -122,7 +122,7 @@ export async function deleteAccount(formData: FormData) {
     );
   });
 
-  revalidateFinancialPaths();
+  revalidateFinancialPaths(financialPathGroups.settings);
 }
 
 export async function transferFunds(formData: FormData) {
@@ -188,7 +188,8 @@ export async function transferFunds(formData: FormData) {
       activityType: "transfer_out",
       description: `Transfer to ${toAccount.name}`,
       activityDate: values.transferDate,
-      transferId
+      transferId,
+      syncSavingsGoal: false
     });
     await applyAccountDelta(client, {
       householdId: user.householdId,
@@ -198,11 +199,13 @@ export async function transferFunds(formData: FormData) {
       activityType: "transfer_in",
       description: `Transfer from ${fromAccount.name}`,
       activityDate: values.transferDate,
-      transferId
+      transferId,
+      syncSavingsGoal: false
     });
+    await syncLinkedSavingsGoals(client, user.householdId, [values.fromAccountId, values.toAccountId]);
   });
 
-  revalidateFinancialPaths();
+  revalidateFinancialPaths(financialPathGroups.settings);
 }
 
 export async function createHouseholdInvite(

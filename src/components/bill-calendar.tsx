@@ -13,6 +13,7 @@ import {
 } from "@/app/(app)/bills/actions";
 import { BillForm } from "@/components/bill-form";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { MoneyInput } from "@/components/money-input";
 import { asArray } from "@/lib/coerce";
 import { describeBillSchedule } from "@/lib/budget/bill-schedules";
 import { safeIsoDate, todayIso } from "@/lib/dates";
@@ -128,7 +129,7 @@ export function BillCalendar({
                 <form action={updateBillInstance} className="mt-4 grid gap-3 sm:grid-cols-2" onSubmit={() => setSelectedId(null)}>
                   <input name="billInstanceId" type="hidden" value={selectedBill.id} />
                   <Field defaultValue={selectedBill.billName} label="Bill name" name="billName" required />
-                  <Field defaultValue={selectedBill.amount} label="Amount" name="amount" required step="0.01" type="number" />
+                  <MoneyInput defaultValue={selectedBill.amount} label="Amount" name="amount" required />
                   <Field defaultValue={safeIsoDate(selectedBill.dueDate, todayIso())} label="Due date" name="dueDate" required type="date" />
                   <div>
                     <label className="label" htmlFor={`bill-category-${selectedBill.id}`}>

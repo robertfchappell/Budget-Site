@@ -1,17 +1,24 @@
 import { revalidatePath } from "next/cache";
 
-export function revalidateFinancialPaths(extraPaths: string[] = []) {
-  revalidatePath("/", "layout");
+const defaultFinancialPaths = [
+  "/dashboard",
+  "/planning",
+  "/bills",
+  "/income",
+  "/expenses",
+  "/settings"
+];
 
-  for (const path of new Set([
-    "/dashboard",
-    "/planning",
-    "/bills",
-    "/income",
-    "/expenses",
-    "/settings",
-    ...extraPaths
-  ])) {
+export const financialPathGroups = {
+  bills: ["/bills", "/dashboard", "/planning", "/settings"],
+  expenses: ["/expenses", "/dashboard", "/planning", "/settings"],
+  income: ["/income", "/dashboard", "/planning", "/settings"],
+  settings: ["/settings", "/dashboard", "/planning"],
+  planning: ["/planning", "/dashboard"]
+} satisfies Record<string, string[]>;
+
+export function revalidateFinancialPaths(paths: string[] = defaultFinancialPaths) {
+  for (const path of new Set(paths)) {
     revalidatePath(path);
   }
 }

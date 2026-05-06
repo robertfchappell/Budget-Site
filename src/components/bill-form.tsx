@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Plus, Save } from "lucide-react";
 import { createRecurringBill, updateRecurringBill } from "@/app/(app)/bills/actions";
+import { MoneyInput } from "@/components/money-input";
 import { todayIso } from "@/lib/dates";
 import type { Account, BillFrequency, Category, RecurringBill } from "@/lib/types";
 
@@ -66,7 +67,7 @@ export function BillForm({
 
       <div className={compact ? "contents" : "grid gap-3 sm:grid-cols-2"}>
         <Field defaultValue={bill?.name} label="Bill name" name="name" required />
-        <Field defaultValue={bill?.amount} label="Amount" name="amount" required step="0.01" type="number" />
+        <MoneyInput defaultValue={bill?.amount} label="Amount" name="amount" required />
 
         <div>
           <label className="label" htmlFor={fieldId("frequency", bill)}>

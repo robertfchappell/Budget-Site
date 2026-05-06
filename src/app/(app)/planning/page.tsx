@@ -6,6 +6,7 @@ import {
   updateSavingsGoal
 } from "@/app/(app)/planning/actions";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { MoneyInput } from "@/components/money-input";
 import { StatCard } from "@/components/stat-card";
 import { getPlanningPageData } from "@/lib/budget/data";
 import { requireUser } from "@/lib/auth";
@@ -63,9 +64,9 @@ export default async function PlanningPage() {
       </section>
 
       <section className="grid gap-4 sm:grid-cols-3">
-        <Metric label="Recurring Income" value={data.dashboard.recurringIncome} />
-        <Metric label="Additional Income" value={data.dashboard.projection.variableIncome} />
-        <Metric label="One-Time Income" value={data.dashboard.projection.oneTimeIncome} />
+        <Metric label="Scheduled Income" value={data.dashboard.scheduledMonthlyIncome} />
+        <Metric label="Posted Income" value={data.dashboard.monthlyIncome} />
+        <Metric label="Pending Deposits" value={data.dashboard.pendingMonthlyIncome} />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
@@ -76,9 +77,9 @@ export default async function PlanningPage() {
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Name" name="name" required />
-            <Field label="Target amount" name="targetAmount" required step="0.01" type="number" />
-            <Field label="Current amount" name="currentAmount" step="0.01" type="number" />
-            <Field label="Monthly target" name="monthlyTarget" step="0.01" type="number" />
+            <MoneyInput label="Target amount" name="targetAmount" required />
+            <MoneyInput label="Current amount" name="currentAmount" />
+            <MoneyInput label="Monthly target" name="monthlyTarget" />
             <Field defaultValue={todayIso()} label="Target date" name="targetDate" type="date" />
             <div>
               <label className="label" htmlFor="accountId">
@@ -138,9 +139,9 @@ export default async function PlanningPage() {
                   <form action={updateSavingsGoal} className="mt-4 grid gap-3 sm:grid-cols-2">
                     <input name="goalId" type="hidden" value={goal.id} />
                     <Field defaultValue={goal.name} label="Name" name="name" required />
-                    <Field defaultValue={goal.targetAmount} label="Target amount" name="targetAmount" required step="0.01" type="number" />
-                    <Field defaultValue={goal.currentAmount} label="Current amount" name="currentAmount" step="0.01" type="number" />
-                    <Field defaultValue={goal.monthlyTarget} label="Monthly target" name="monthlyTarget" step="0.01" type="number" />
+                    <MoneyInput defaultValue={goal.targetAmount} label="Target amount" name="targetAmount" required />
+                    <MoneyInput defaultValue={goal.currentAmount} label="Current amount" name="currentAmount" />
+                    <MoneyInput defaultValue={goal.monthlyTarget} label="Monthly target" name="monthlyTarget" />
                     <Field defaultValue={goal.targetDate ?? ""} label="Target date" name="targetDate" type="date" />
                     <div>
                       <label className="label" htmlFor={`goal-account-${goal.id}`}>

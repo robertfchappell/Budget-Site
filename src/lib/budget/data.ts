@@ -7,6 +7,7 @@ import {
   normalizeIncomeRecurrence,
   normalizeIncomeType
 } from "@/lib/budget/income-types";
+import { incomeStatus } from "@/lib/budget/income-status";
 import { getFinancialAccounts, getFinancialState, getMonthlyFinancialRollups } from "@/lib/budget/financial-state";
 import {
   normalizeAccountType,
@@ -76,7 +77,8 @@ export async function getAccounts(householdId: string) {
 }
 
 export async function getDashboardData(householdId: string) {
-  const financial = await getFinancialState(householdId);
+  await ensureBillInstancesForRange(householdId);
+  const financial = await getFinancialState(householdId, { ensureBills: false });
   const month = financial.month;
   const upcoming = upcomingBounds(14);
   const trendWindow = sixMonthWindow();
@@ -177,6 +179,8 @@ export async function getDashboardData(householdId: string) {
     savingsBalance: financial.savingsBalance,
     netCash: financial.netCash,
     monthlyIncome: financial.monthlyIncome,
+    scheduledMonthlyIncome: financial.scheduledMonthlyIncome,
+    pendingMonthlyIncome: financial.pendingMonthlyIncome,
     recurringIncome: financial.recurringIncome,
     guaranteedIncome: financial.guaranteedIncome,
     variableIncome: financial.variableIncome,
@@ -217,7 +221,7 @@ export async function getDashboardData(householdId: string) {
     incomeByType: financial.incomeByType,
     trend: trend.map((row) => ({
       month: safeFormatDate(row.month, "MMM", "N/A"),
-      income: row.income,
+      income: row.scheduledIncome,
       expenses: row.expenses,
       bills: row.bills
     })) satisfies TrendDatum[],
@@ -326,6 +330,7 @@ export async function getIncomePageData(householdId: string, incomeTypeFilter?: 
       user_name: string;
       account_name: string | null;
       account_id: string | null;
+      balance_posted_at: string | null;
     }>(
       `
         SELECT income_entries.id, income_entries.employer, income_entries.income_type,
@@ -336,7 +341,7 @@ export async function getIncomePageData(householdId: string, incomeTypeFilter?: 
                income_entries.base_pay, income_entries.overtime_pay, income_entries.bonus_pay,
                income_entries.va_income, income_entries.taxes_withheld, income_entries.deposit_amount,
                income_entries.notes, income_entries.term, users.name AS user_name, accounts.name AS account_name,
-               accounts.id AS account_id
+               accounts.id AS account_id, income_entries.balance_posted_at
         FROM income_entries
         JOIN users ON users.id = income_entries.user_id
         LEFT JOIN accounts ON accounts.id = income_entries.account_id
@@ -375,6 +380,8 @@ export async function getIncomePageData(householdId: string, incomeTypeFilter?: 
       recurring: number;
       one_time: number;
       guaranteed: number;
+      posted: number;
+      pending: number;
     }>(
       `
         SELECT income_entries.income_type,
@@ -382,7 +389,9 @@ export async function getIncomePageData(householdId: string, incomeTypeFilter?: 
                SUM(income_entries.deposit_amount) AS total,
                SUM(CASE WHEN income_entries.income_frequency <> 'one_time' THEN income_entries.deposit_amount ELSE 0 END) AS recurring,
                SUM(CASE WHEN income_entries.income_frequency = 'one_time' THEN income_entries.deposit_amount ELSE 0 END) AS one_time,
-               SUM(CASE WHEN income_entries.income_frequency <> 'one_time' AND income_entries.guaranteed = true THEN income_entries.deposit_amount ELSE 0 END) AS guaranteed
+               SUM(CASE WHEN income_entries.income_frequency <> 'one_time' AND income_entries.guaranteed = true THEN income_entries.deposit_amount ELSE 0 END) AS guaranteed,
+               SUM(CASE WHEN income_entries.balance_posted_at IS NOT NULL THEN income_entries.deposit_amount ELSE 0 END) AS posted,
+               SUM(CASE WHEN income_entries.balance_posted_at IS NULL THEN income_entries.deposit_amount ELSE 0 END) AS pending
         FROM income_entries
         LEFT JOIN categories ON categories.id = income_entries.category_id
         WHERE income_entries.household_id = $1
@@ -409,6 +418,8 @@ export async function getIncomePageData(householdId: string, incomeTypeFilter?: 
       categoryName: nullableDisplayLabel(row.category_name),
       categoryColor: row.category_color ? normalizeColor(row.category_color) : null,
       paycheckDate: safeIsoDate(row.paycheck_date),
+      balancePostedAt: safeIsoDate(row.balance_posted_at) || null,
+      status: incomeStatus(row.balance_posted_at, row.paycheck_date),
       basePay: asNumber(row.base_pay),
       overtimePay: asNumber(row.overtime_pay),
       bonusPay: asNumber(row.bonus_pay),
@@ -437,6 +448,8 @@ export async function getIncomePageData(householdId: string, incomeTypeFilter?: 
         recurring: asNumber(row.recurring),
         oneTime: asNumber(row.one_time),
         guaranteed: asNumber(row.guaranteed),
+        posted: asNumber(row.posted),
+        pending: asNumber(row.pending),
         color: normalizeColor(row.color)
       };
     }) satisfies IncomeTypeSummary[]
@@ -490,7 +503,7 @@ export async function getExpensesPageData(householdId: string) {
     })) satisfies ChartDatum[],
     trend: trend.map((row) => ({
       month: safeFormatDate(row.month, "MMM", "N/A"),
-      income: row.income,
+      income: row.scheduledIncome,
       expenses: row.expenses,
       bills: row.bills
     })) satisfies TrendDatum[]
@@ -498,10 +511,8 @@ export async function getExpensesPageData(householdId: string) {
 }
 
 export async function getPlanningPageData(householdId: string) {
-  const [dashboard, accounts, goals, snapshots] = await Promise.all([
+  const [dashboard, snapshots] = await Promise.all([
     getDashboardData(householdId),
-    getAccounts(householdId),
-    querySavingsGoals(householdId),
     query<{
       month: string;
       checking_balance: number;
@@ -527,8 +538,8 @@ export async function getPlanningPageData(householdId: string) {
 
   return {
     dashboard,
-    accounts,
-    goals,
+    accounts: dashboard.accounts,
+    goals: dashboard.savingsGoals,
     snapshots: snapshots.rows.map((row) => ({
       month: safeIsoDate(row.month),
       checking_balance: asNumber(row.checking_balance),
@@ -548,7 +559,7 @@ export async function getSettingsPageData(householdId: string) {
   await ensureBillInstancesForRange(householdId);
 
   const [financial, notifications, transfers, activity, members, invites] = await Promise.all([
-    getFinancialState(householdId),
+    getFinancialState(householdId, { ensureBills: false }),
     query<{
       id: string;
       title: string;

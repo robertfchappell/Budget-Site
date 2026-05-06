@@ -15,6 +15,7 @@ export type IncomeType =
   | "misc";
 export type IncomeRecurrence = "recurring" | "one_time";
 export type IncomeFrequency = "weekly" | "biweekly" | "monthly" | "one_time";
+export type IncomeStatus = "posted" | "pending" | "scheduled";
 
 export type UserContext = {
   id: string;
@@ -88,6 +89,8 @@ export type IncomeEntry = {
   categoryName: string | null;
   categoryColor: string | null;
   paycheckDate: string;
+  balancePostedAt: string | null;
+  status: IncomeStatus;
   basePay: number;
   overtimePay: number;
   bonusPay: number;
@@ -184,6 +187,8 @@ export type IncomeTypeSummary = {
   recurring: number;
   oneTime: number;
   guaranteed: number;
+  posted: number;
+  pending: number;
   color: string;
 };
 
