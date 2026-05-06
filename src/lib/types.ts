@@ -14,6 +14,7 @@ export type IncomeType =
   | "bonus"
   | "misc";
 export type IncomeRecurrence = "recurring" | "one_time";
+export type IncomeFrequency = "weekly" | "biweekly" | "monthly" | "one_time";
 
 export type UserContext = {
   id: string;
@@ -81,6 +82,7 @@ export type IncomeEntry = {
   incomeType: IncomeType;
   incomeTypeLabel: string;
   recurrence: IncomeRecurrence;
+  incomeFrequency: IncomeFrequency;
   guaranteed: boolean;
   categoryId: string | null;
   categoryName: string | null;

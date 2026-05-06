@@ -286,13 +286,13 @@ async function run() {
       await client.query(
         `
           INSERT INTO income_entries (
-            household_id, user_id, account_id, category_id, employer, income_type, recurrence, guaranteed, paycheck_date, base_pay,
+            household_id, user_id, account_id, category_id, employer, income_type, recurrence, income_frequency, guaranteed, paycheck_date, base_pay,
             overtime_pay, bonus_pay, va_income, taxes_withheld, deposit_amount, notes
           )
           VALUES
-            ($1, $2, $4, $8, 'Acme Logistics', 'regular_paycheck', 'recurring', true, $5, 2850, 175, 0, 0, 610, 2415, ''),
-            ($1, $3, $4, $8, 'Northside Clinic', 'regular_paycheck', 'recurring', true, $6, 2300, 0, 200, 0, 510, 1990, ''),
-            ($1, $2, $4, $9, 'VA Benefits', 'va_disability', 'recurring', true, $7, 0, 0, 0, 675, 0, 675, 'VA disability income')
+            ($1, $2, $4, $8, 'Acme Logistics', 'regular_paycheck', 'recurring', 'biweekly', true, $5, 2850, 175, 0, 0, 610, 2415, ''),
+            ($1, $3, $4, $8, 'Northside Clinic', 'regular_paycheck', 'recurring', 'biweekly', true, $6, 2300, 0, 200, 0, 510, 1990, ''),
+            ($1, $2, $4, $9, 'VA Benefits', 'va_disability', 'recurring', 'monthly', true, $7, 0, 0, 0, 675, 0, 675, 'VA disability income')
         `,
         [
           householdId,

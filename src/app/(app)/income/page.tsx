@@ -110,7 +110,7 @@ export default async function IncomePage({
                     {entry.term ? <p className="mt-1 text-xs text-slate-400">{entry.term}</p> : null}
                   </td>
                   <td className="table-cell text-slate-300">
-                    {entry.recurrence === "recurring" ? "Recurring" : "One-time"}
+                    {incomeFrequencyLabel(entry.incomeFrequency)}
                   </td>
                   <td className="table-cell text-slate-300">{entry.accountName ?? "Not linked"}</td>
                   <td className="table-cell font-bold text-teal-200">{dollars(entry.depositAmount)}</td>
@@ -161,4 +161,20 @@ function incomeDetail(entry: { incomeType: string; employer: string }) {
   }
 
   return entry.employer;
+}
+
+function incomeFrequencyLabel(value: string) {
+  if (value === "weekly") {
+    return "Weekly";
+  }
+
+  if (value === "biweekly") {
+    return "Biweekly";
+  }
+
+  if (value === "monthly") {
+    return "Monthly";
+  }
+
+  return "One-time";
 }

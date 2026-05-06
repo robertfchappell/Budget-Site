@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { Banknote, ChevronDown, Save } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { createIncomeEntry, updateIncomeEntry } from "@/app/(app)/income/actions";
-import { incomeTypeOptions } from "@/lib/budget/income-types";
+import { defaultFrequencyForIncomeType, incomeTypeOptions } from "@/lib/budget/income-types";
 import { todayIso } from "@/lib/dates";
-import type { Account, IncomeEntry, IncomeType } from "@/lib/types";
+import type { Account, IncomeEntry, IncomeFrequency, IncomeType } from "@/lib/types";
 
 type IncomePreset = {
   title: string;
@@ -120,7 +121,12 @@ const presets: Record<IncomeType, IncomePreset> = {
   }
 };
 
-const defaultRecurring = new Map(incomeTypeOptions.map((option) => [option.value, option.defaultRecurrence === "recurring"]));
+const frequencyLabels: Array<{ value: IncomeFrequency; label: string }> = [
+  { value: "one_time", label: "One-time" },
+  { value: "weekly", label: "Weekly" },
+  { value: "biweekly", label: "Biweekly" },
+  { value: "monthly", label: "Monthly" }
+];
 
 export function IncomeEntryForm({
   accounts,
@@ -131,17 +137,67 @@ export function IncomeEntryForm({
   entry?: IncomeEntry;
   compact?: boolean;
 }) {
+  const formRef = useRef<HTMLFormElement>(null);
+  const router = useRouter();
   const [incomeType, setIncomeType] = useState<IncomeType>(entry?.incomeType ?? "regular_paycheck");
-  const [isRecurring, setIsRecurring] = useState(entry?.recurrence ? entry.recurrence === "recurring" : defaultRecurring.get(incomeType) ?? false);
+  const [incomeFrequency, setIncomeFrequency] = useState<IncomeFrequency>(
+    entry?.incomeFrequency ?? defaultFrequencyForIncomeType(entry?.incomeType ?? "regular_paycheck")
+  );
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const preset = presets[incomeType];
   const action = entry ? updateIncomeEntry : createIncomeEntry;
   const hasPayrollDetails = Boolean(entry && (entry.basePay || entry.overtimePay || entry.bonusPay || entry.taxesWithheld));
-  const helper = useMemo(() => preset.helper, [preset]);
+  const isRecurring = incomeFrequency !== "one_time";
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const form = formRef.current;
+
+    if (!form || saveState === "saving") {
+      return;
+    }
+
+    setSaveState("saving");
+
+    try {
+      await action(new FormData(form));
+      router.refresh();
+      setSaveState("saved");
+
+      if (entry) {
+        window.setTimeout(() => {
+          const details = form.closest("details") as HTMLDetailsElement | null;
+
+          if (details) {
+            details.open = false;
+          }
+
+          setSaveState("idle");
+        }, 650);
+        return;
+      }
+
+      form.reset();
+      setIncomeType("regular_paycheck");
+      setIncomeFrequency(defaultFrequencyForIncomeType("regular_paycheck"));
+      window.setTimeout(() => setSaveState("idle"), 1400);
+    } catch (error) {
+      console.error("[income-entry-form] Income save failed", error);
+      setSaveState("error");
+    }
+  }
 
   return (
-    <form action={action} className={compact ? "grid gap-3 sm:grid-cols-2" : "panel p-4"}>
+    <form
+      action={action}
+      className={compact ? "grid gap-3 sm:grid-cols-2" : "panel p-4"}
+      ref={formRef}
+      onSubmit={handleSubmit}
+    >
       {entry ? <input name="incomeId" type="hidden" value={entry.id} /> : null}
       <input name="recurrence" type="hidden" value={isRecurring ? "recurring" : "one_time"} />
+      <input name="incomeFrequency" type="hidden" value={preset.showRecurring ? incomeFrequency : "one_time"} />
       {!preset.advancedPayroll ? (
         <>
           <input name="basePay" type="hidden" value="0" />
@@ -177,7 +233,7 @@ export function IncomeEntryForm({
             onChange={(event) => {
               const nextType = event.target.value as IncomeType;
               setIncomeType(nextType);
-              setIsRecurring(defaultRecurring.get(nextType) ?? false);
+              setIncomeFrequency(defaultFrequencyForIncomeType(nextType));
             }}
           >
             {incomeTypeOptions.map((option) => (
@@ -186,13 +242,13 @@ export function IncomeEntryForm({
               </option>
             ))}
           </select>
-          <p className="mt-2 text-xs text-slate-400">{helper}</p>
+          <p className="mt-2 text-xs text-slate-400">{preset.helper}</p>
         </div>
 
-        <div className="sm:col-span-2 rounded-md border border-slate-800 bg-slate-950/35 p-3 transition-all duration-200">
+        <div className="sm:col-span-2 rounded-md border border-slate-800 bg-slate-950/35 p-3 transition-all duration-200" key={incomeType}>
           <p className="text-sm font-bold text-white">{preset.title}</p>
           <p className="mt-1 text-xs text-slate-400">
-            {isRecurring ? "Included in recurring income and the monthly outlook." : "Counted for the selected month only."}
+            {incomeFrequencyHelper(incomeFrequency)}
           </p>
         </div>
 
@@ -232,15 +288,23 @@ export function IncomeEntryForm({
         />
 
         {preset.showRecurring ? (
-          <label className="flex min-h-11 items-center justify-between gap-3 rounded-md border border-slate-800 bg-slate-950/35 px-3 text-sm font-semibold text-slate-300">
-            <span>Repeats regularly</span>
-            <input
-              checked={isRecurring}
-              className="size-4 accent-teal-500"
-              onChange={(event) => setIsRecurring(event.target.checked)}
-              type="checkbox"
-            />
-          </label>
+          <div>
+            <label className="label" htmlFor={fieldId("incomeFrequency", entry)}>
+              How often?
+            </label>
+            <select
+              className="field"
+              id={fieldId("incomeFrequency", entry)}
+              onChange={(event) => setIncomeFrequency(event.target.value as IncomeFrequency)}
+              value={incomeFrequency}
+            >
+              {frequencyLabels.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
         ) : null}
 
         <div>
@@ -276,12 +340,42 @@ export function IncomeEntryForm({
         {preset.showNotes ? <Field defaultValue={entry?.notes ?? ""} label="Notes" name="notes" /> : <input name="notes" type="hidden" value={entry?.notes ?? ""} />}
       </div>
 
-      <button className={compact ? "secondary-button" : "primary-button mt-4"} type="submit">
-        {entry ? <Save aria-hidden size={16} /> : <Banknote aria-hidden size={17} />}
-        {entry ? "Save income" : "Add income"}
-      </button>
+      <div className={compact ? "sm:col-span-2 flex flex-wrap items-center gap-3" : "mt-4 flex flex-wrap items-center gap-3"}>
+        <button
+          className={`${compact ? "secondary-button" : "primary-button"} transition-all duration-200 ${saveState === "saved" ? "ring-2 ring-teal-300/45" : ""}`}
+          disabled={saveState === "saving"}
+          type="submit"
+        >
+          {entry ? <Save aria-hidden size={16} /> : <Banknote aria-hidden size={17} />}
+          {saveState === "saving" ? "Saving..." : saveState === "saved" ? "Saved" : entry ? "Save income" : "Add income"}
+        </button>
+        <p
+          aria-live="polite"
+          className={`text-sm transition-opacity duration-200 ${
+            saveState === "idle" ? "opacity-0" : saveState === "error" ? "text-rose-200" : "text-teal-200"
+          }`}
+        >
+          {saveState === "error" ? "Could not save. Check the fields and try again." : saveState === "saved" ? "Income saved." : "Updating account balance..."}
+        </p>
+      </div>
     </form>
   );
+}
+
+function incomeFrequencyHelper(frequency: IncomeFrequency) {
+  if (frequency === "weekly") {
+    return "Included as weekly recurring income in the monthly outlook.";
+  }
+
+  if (frequency === "biweekly") {
+    return "Included as biweekly recurring income in the monthly outlook.";
+  }
+
+  if (frequency === "monthly") {
+    return "Included as monthly recurring income in the monthly outlook.";
+  }
+
+  return "Counted for the selected month only.";
 }
 
 function fieldId(name: string, entry?: IncomeEntry) {

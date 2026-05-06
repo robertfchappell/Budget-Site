@@ -6,8 +6,9 @@ import { applyAccountDelta } from "@/lib/budget/accounting";
 import { revalidateFinancialPaths } from "@/lib/budget/revalidation";
 import {
   defaultGuaranteedForIncomeType,
-  defaultRecurrenceForIncomeType,
+  defaultFrequencyForIncomeType,
   incomeTypeLabel,
+  normalizeIncomeFrequency,
   normalizeIncomeType
 } from "@/lib/budget/income-types";
 import { incomeSchema } from "@/lib/validators";
@@ -26,10 +27,10 @@ export async function createIncomeEntry(formData: FormData) {
       `
         INSERT INTO income_entries (
           household_id, user_id, account_id, category_id, employer, income_type,
-          recurrence, guaranteed, paycheck_date, base_pay,
+          recurrence, income_frequency, guaranteed, paycheck_date, base_pay,
           overtime_pay, bonus_pay, va_income, taxes_withheld, deposit_amount, notes, term
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       `,
       [
         user.householdId,
@@ -39,6 +40,7 @@ export async function createIncomeEntry(formData: FormData) {
         values.employer,
         values.incomeType,
         values.recurrence,
+        values.incomeFrequency,
         values.guaranteed,
         values.paycheckDate,
         values.basePay,
@@ -107,16 +109,17 @@ export async function updateIncomeEntry(formData: FormData) {
             employer = $5,
             income_type = $6,
             recurrence = $7,
-            guaranteed = $8,
-            paycheck_date = $9,
-            base_pay = $10,
-            overtime_pay = $11,
-            bonus_pay = $12,
-            va_income = $13,
-            taxes_withheld = $14,
-            deposit_amount = $15,
-            notes = $16,
-            term = $17
+            income_frequency = $8,
+            guaranteed = $9,
+            paycheck_date = $10,
+            base_pay = $11,
+            overtime_pay = $12,
+            bonus_pay = $13,
+            va_income = $14,
+            taxes_withheld = $15,
+            deposit_amount = $16,
+            notes = $17,
+            term = $18
         WHERE id = $1 AND household_id = $2
       `,
       [
@@ -127,6 +130,7 @@ export async function updateIncomeEntry(formData: FormData) {
         values.employer,
         values.incomeType,
         values.recurrence,
+        values.incomeFrequency,
         values.guaranteed,
         values.paycheckDate,
         values.basePay,
@@ -230,10 +234,12 @@ async function findIncomeCategoryId(
 
 function normalizeIncomeForm(formData: FormData) {
   const incomeType = normalizeIncomeType(formData.get("incomeType"));
-  const recurrence = resolveIncomeRecurrence(formData, incomeType);
+  const incomeFrequency = resolveIncomeFrequency(formData, incomeType);
+  const recurrence = incomeFrequency === "one_time" ? "one_time" : "recurring";
   const parsed = incomeSchema.parse({
     ...Object.fromEntries(formData),
     incomeType,
+    incomeFrequency,
     recurrence,
     guaranteed: recurrence === "recurring" && defaultGuaranteedForIncomeType(incomeType)
   });
@@ -256,18 +262,26 @@ function normalizeIncomeForm(formData: FormData) {
   };
 }
 
-function resolveIncomeRecurrence(formData: FormData, incomeType: IncomeType) {
+function resolveIncomeFrequency(formData: FormData, incomeType: IncomeType) {
+  const frequency = normalizeIncomeFrequency(formData.get("incomeFrequency"));
+
+  if (frequency !== "one_time") {
+    return frequency;
+  }
+
   const recurrenceValues = formData.getAll("recurrence").map(String);
 
   if (recurrenceValues.includes("recurring")) {
-    return "recurring";
+    return defaultFrequencyForIncomeType(incomeType) === "one_time"
+      ? "monthly"
+      : defaultFrequencyForIncomeType(incomeType);
   }
 
   if (recurrenceValues.includes("one_time")) {
     return "one_time";
   }
 
-  return defaultRecurrenceForIncomeType(incomeType);
+  return defaultFrequencyForIncomeType(incomeType);
 }
 
 function displayNameForIncomeType(incomeType: IncomeType, value: string | undefined, term: string | undefined) {

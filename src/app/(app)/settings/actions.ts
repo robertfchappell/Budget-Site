@@ -9,6 +9,8 @@ import { todayIso } from "@/lib/dates";
 import { createInviteToken, hashInviteToken, inviteUrl } from "@/lib/households/invites";
 import {
   accountBalanceSchema,
+  accountSchema,
+  deleteAccountSchema,
   inviteSchema,
   removeMemberSchema,
   resendInviteSchema,
@@ -32,6 +34,57 @@ export type InviteMutationResult = {
   message?: string;
 };
 
+export async function createAccount(formData: FormData) {
+  const user = await requireUser();
+  const parsed = accountSchema.safeParse(Object.fromEntries(formData));
+
+  if (!parsed.success) {
+    console.warn("[settings:create-account] Invalid account form", parsed.error.flatten().fieldErrors);
+    return;
+  }
+
+  const values = parsed.data;
+
+  await withTransaction(async (client) => {
+    const created = await client.query<{ id: string }>(
+      `
+        INSERT INTO accounts (
+          household_id, name, type, current_balance, institution, include_in_safe_to_spend
+        )
+        VALUES ($1, $2, $3, 0, $4, $5)
+        ON CONFLICT (household_id, name)
+        DO UPDATE SET type = EXCLUDED.type,
+                      institution = EXCLUDED.institution,
+                      include_in_safe_to_spend = EXCLUDED.include_in_safe_to_spend
+        RETURNING id
+      `,
+      [
+        user.householdId,
+        values.accountName,
+        values.accountType,
+        values.institution || null,
+        values.includeInSafeToSpend
+      ]
+    );
+    const accountId = created.rows[0]?.id;
+
+    if (!accountId) {
+      return;
+    }
+
+    await setAccountBalance(client, {
+      householdId: user.householdId,
+      accountId,
+      userId: user.id,
+      currentBalance: values.currentBalance,
+      activityDate: todayIso(),
+      description: `Account balance set: ${values.accountName}`
+    });
+  });
+
+  revalidateFinancialPaths();
+}
+
 export async function updateAccountBalance(formData: FormData) {
   const user = await requireUser();
   const values = accountBalanceSchema.parse(Object.fromEntries(formData));
@@ -45,6 +98,28 @@ export async function updateAccountBalance(formData: FormData) {
       activityDate: todayIso(),
       description: "Manual balance update"
     });
+  });
+
+  revalidateFinancialPaths();
+}
+
+export async function deleteAccount(formData: FormData) {
+  const user = await requireUser();
+  const parsed = deleteAccountSchema.safeParse(Object.fromEntries(formData));
+
+  if (!parsed.success) {
+    console.warn("[settings:delete-account] Invalid delete account form", parsed.error.flatten().fieldErrors);
+    return;
+  }
+
+  await withTransaction(async (client) => {
+    await client.query(
+      `
+        DELETE FROM accounts
+        WHERE id = $1 AND household_id = $2
+      `,
+      [parsed.data.accountId, user.householdId]
+    );
   });
 
   revalidateFinancialPaths();

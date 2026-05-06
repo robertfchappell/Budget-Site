@@ -46,7 +46,7 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
         <StatCard
           detail="Manual checking account total"
           icon={Landmark}
@@ -73,6 +73,13 @@ export default async function DashboardPage() {
           title="Monthly Income"
           tone="teal"
           value={data.monthlyIncome}
+        />
+        <StatCard
+          detail="Expenses recorded this month"
+          icon={WalletCards}
+          title="Monthly Expenses"
+          tone="rose"
+          value={data.monthlyExpenses}
         />
         <StatCard
           detail={`${dollars(data.paidBills)} paid so far`}
@@ -152,9 +159,10 @@ export default async function DashboardPage() {
             <WalletCards aria-hidden className="text-sky-300" size={20} />
           </div>
           <div className="space-y-3">
-            {data.accounts
-              .filter((account) => account.type === "checking" || account.type === "savings")
-              .map((account) => {
+            {data.accounts.filter((account) => account.type === "checking" || account.type === "savings").length ? (
+              data.accounts
+                .filter((account) => account.type === "checking" || account.type === "savings")
+                .map((account) => {
                 const share = data.netCash > 0 ? Math.max(0, account.currentBalance / data.netCash) : 0;
                 return (
                   <div key={account.id}>
@@ -167,7 +175,12 @@ export default async function DashboardPage() {
                     </div>
                   </div>
                 );
-              })}
+                })
+            ) : (
+              <p className="rounded-md border border-dashed border-slate-700 p-4 text-sm text-slate-400">
+                Add checking or savings accounts in Settings to see allocation.
+              </p>
+            )}
           </div>
         </article>
       </section>
@@ -283,6 +296,7 @@ export default async function DashboardPage() {
             <Metric label="Forecast Savings" value={data.projection.projectedSavingsBalance} />
             <Metric label="Forecast Net Cash" value={data.projection.projectedNetCash} />
             <Metric label="Recurring Bills" value={data.projection.totalCommittedBills} />
+            <Metric label="Recorded Expenses" value={data.monthlyExpenses} />
             <Metric label="Planned Savings" value={data.projection.projectedSavings} />
             <Metric label="Month Trajectory" value={data.projection.monthlyRollover} />
           </div>

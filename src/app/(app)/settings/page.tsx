@@ -1,6 +1,7 @@
-import { ArrowDownUp, Bell, Download, History, PiggyBank, Save, Wallet } from "lucide-react";
+import { ArrowDownUp, Bell, Download, History, PiggyBank, Plus, Save, Trash2, Wallet } from "lucide-react";
 import Link from "next/link";
-import { transferFunds, updateAccountBalance } from "@/app/(app)/settings/actions";
+import { createAccount, deleteAccount, transferFunds, updateAccountBalance } from "@/app/(app)/settings/actions";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { HouseholdInvites } from "@/components/household-invites";
 import { getSettingsPageData } from "@/lib/budget/data";
 import { requireUser } from "@/lib/auth";
@@ -16,6 +17,7 @@ export default async function SettingsPage() {
   const defaultToAccount =
     data.accounts.find((account) => account.type === "savings" && account.id !== defaultFromAccount?.id) ??
     data.accounts.find((account) => account.id !== defaultFromAccount?.id);
+  const hasTransferAccounts = Boolean(defaultFromAccount && defaultToAccount);
 
   return (
     <div className="space-y-6">
@@ -36,34 +38,88 @@ export default async function SettingsPage() {
 
       <section className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
         <article className="panel p-4">
-          <h2 className="text-lg font-bold text-white">Accounts</h2>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-white">Accounts</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Add checking, savings, cash, or credit accounts used by the household.
+              </p>
+            </div>
+            <Wallet aria-hidden className="text-teal-300" size={20} />
+          </div>
+
+          <form action={createAccount} className="mt-4 rounded-md border border-teal-400/20 bg-teal-400/[0.04] p-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Account name" name="accountName" placeholder="Emergency Savings" required />
+              <div>
+                <label className="label" htmlFor="accountType">
+                  Type
+                </label>
+                <select className="field" defaultValue="checking" id="accountType" name="accountType" required>
+                  <option value="checking">Checking</option>
+                  <option value="savings">Savings</option>
+                  <option value="cash">Cash</option>
+                  <option value="credit">Credit</option>
+                </select>
+              </div>
+              <Field label="Current balance" name="currentBalance" required step="0.01" type="number" />
+              <Field label="Institution" name="institution" placeholder="Manual" />
+              <input name="includeInSafeToSpend" type="hidden" value="true" />
+            </div>
+            <button className="primary-button mt-4" type="submit">
+              <Plus aria-hidden size={17} />
+              Add account
+            </button>
+          </form>
+
           <div className="mt-4 space-y-3">
-            {data.accounts.map((account) => (
-              <form
-                action={updateAccountBalance}
-                className="grid gap-3 rounded-md border border-slate-800 bg-slate-950/40 p-3 sm:grid-cols-[1fr_180px_auto]"
-                key={account.id}
-              >
-                <input name="accountId" type="hidden" value={account.id} />
-                <div>
-                  <p className="font-semibold text-white">{account.name}</p>
-                  <p className="text-sm capitalize text-slate-400">
-                    {account.type} · {account.institution ?? "Manual"}
-                  </p>
+            {data.accounts.length ? (
+              data.accounts.map((account) => (
+                <div
+                  className="grid gap-3 rounded-md border border-slate-800 bg-slate-950/40 p-3 lg:grid-cols-[1fr_auto]"
+                  key={account.id}
+                >
+                  <form
+                    action={updateAccountBalance}
+                    className="grid gap-3 sm:grid-cols-[1fr_180px_auto]"
+                  >
+                    <input name="accountId" type="hidden" value={account.id} />
+                    <div>
+                      <p className="font-semibold text-white">{account.name}</p>
+                      <p className="text-sm capitalize text-slate-400">
+                        {account.type} - {account.institution ?? "Manual"}
+                      </p>
+                    </div>
+                    <input
+                      aria-label={`${account.name} current balance`}
+                      className="field"
+                      defaultValue={account.currentBalance}
+                      name="currentBalance"
+                      step="0.01"
+                      type="number"
+                    />
+                    <button aria-label={`Save ${account.name}`} className="secondary-button" type="submit">
+                      <Save aria-hidden size={16} />
+                      Save
+                    </button>
+                  </form>
+                  <form action={deleteAccount} className="lg:justify-self-end">
+                    <input name="accountId" type="hidden" value={account.id} />
+                    <ConfirmSubmitButton
+                      className="secondary-button border-rose-400/30 text-rose-100"
+                      message={`Delete ${account.name}? Linked income, expenses, and bills will stay in history, but account activity and transfers for this account will be removed.`}
+                    >
+                      <Trash2 aria-hidden size={16} />
+                      Delete
+                    </ConfirmSubmitButton>
+                  </form>
                 </div>
-                <input
-                  className="field"
-                  defaultValue={account.currentBalance}
-                  name="currentBalance"
-                  step="0.01"
-                  type="number"
-                />
-                <button aria-label={`Save ${account.name}`} className="secondary-button" type="submit">
-                  <Save aria-hidden size={16} />
-                  Save
-                </button>
-              </form>
-            ))}
+              ))
+            ) : (
+              <p className="rounded-md border border-dashed border-slate-700 p-4 text-sm text-slate-400">
+                No accounts yet. Add a checking or savings account to start tracking balances.
+              </p>
+            )}
           </div>
         </article>
 
@@ -73,44 +129,50 @@ export default async function SettingsPage() {
               <ArrowDownUp aria-hidden className="text-teal-300" size={18} />
               <h2 className="text-lg font-bold text-white">Transfer Funds</h2>
             </div>
-            <form action={transferFunds} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-              <div>
-                <label className="label" htmlFor="fromAccountId">
-                  From
-                </label>
-                <select className="field" defaultValue={defaultFromAccount?.id ?? ""} id="fromAccountId" name="fromAccountId" required>
-                  {data.accounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="label" htmlFor="toAccountId">
-                  To
-                </label>
-                <select className="field" defaultValue={defaultToAccount?.id ?? ""} id="toAccountId" name="toAccountId" required>
-                  {data.accounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <Field label="Amount" name="amount" required step="0.01" type="number" />
-              <Field defaultValue={todayIso()} label="Date" name="transferDate" required type="date" />
-              <div className="sm:col-span-2 xl:col-span-1">
-                <label className="label" htmlFor="notes">
-                  Notes
-                </label>
-                <input className="field" id="notes" name="notes" />
-              </div>
-              <button className="primary-button sm:col-span-2 xl:col-span-1" type="submit">
-                <ArrowDownUp aria-hidden size={16} />
-                Transfer
-              </button>
-            </form>
+            {hasTransferAccounts ? (
+              <form action={transferFunds} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                <div>
+                  <label className="label" htmlFor="fromAccountId">
+                    From
+                  </label>
+                  <select className="field" defaultValue={defaultFromAccount?.id ?? ""} id="fromAccountId" name="fromAccountId" required>
+                    {data.accounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label" htmlFor="toAccountId">
+                    To
+                  </label>
+                  <select className="field" defaultValue={defaultToAccount?.id ?? ""} id="toAccountId" name="toAccountId" required>
+                    {data.accounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <Field label="Amount" name="amount" required step="0.01" type="number" />
+                <Field defaultValue={todayIso()} label="Date" name="transferDate" required type="date" />
+                <div className="sm:col-span-2 xl:col-span-1">
+                  <label className="label" htmlFor="notes">
+                    Notes
+                  </label>
+                  <input className="field" id="notes" name="notes" />
+                </div>
+                <button className="primary-button sm:col-span-2 xl:col-span-1" type="submit">
+                  <ArrowDownUp aria-hidden size={16} />
+                  Transfer
+                </button>
+              </form>
+            ) : (
+              <p className="rounded-md border border-dashed border-slate-700 p-4 text-sm text-slate-400">
+                Add at least two accounts to move money between them.
+              </p>
+            )}
           </article>
 
           <article className="panel p-4">

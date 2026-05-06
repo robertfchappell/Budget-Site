@@ -120,7 +120,7 @@ async function signupFreshHousehold() {
 async function accountForms(cookie) {
   const page = await get("/settings", cookie);
   assert(page.response.status === 200, `Settings returned ${page.response.status}`);
-  const found = forms(page.text).filter((form) => form.includes('name="currentBalance"'));
+  const found = forms(page.text).filter((form) => form.includes('name="currentBalance"') && form.includes('name="accountId"'));
   const checking = found.find((form) => form.toLowerCase().includes("checking"));
   const savings = found.find((form) => form.toLowerCase().includes("savings"));
 
@@ -158,6 +158,36 @@ async function setInitialBalances(cookie) {
   return current;
 }
 
+async function verifyAccountManagement(cookie) {
+  const accountName = `Integrity Cash ${Date.now()}`;
+  let page = await get("/settings", cookie);
+  const createForm = findForm(page.text, (form) => form.includes('name="accountName"'), "account create");
+
+  await post("/settings", cookie, createForm, {
+    accountName,
+    accountType: "cash",
+    currentBalance: "42.00",
+    institution: "Manual",
+    includeInSafeToSpend: "true"
+  });
+
+  page = await get("/settings", cookie);
+  assert(page.text.includes(accountName), "Created account should appear in settings");
+  const accountForm = findForm(page.text, (form) => form.includes(accountName) && form.includes('name="accountId"'), "created account row");
+  assertMoney(Number(inputValue(accountForm, "currentBalance")), 42, "Created account balance");
+  const accountId = inputValue(accountForm, "accountId");
+
+  const deleteForm = findForm(
+    page.text,
+    (form) => form.includes(`value="${accountId}"`) && form.includes("Delete"),
+    "account delete"
+  );
+  await post("/settings", cookie, deleteForm);
+
+  page = await get("/settings", cookie);
+  assert(!page.text.includes(accountName), "Deleted account should disappear from settings");
+}
+
 async function verifyExpenseLifecycle(cookie, checkingId) {
   const merchant = `Integrity Expense ${Date.now()}`;
   let page = await get("/expenses", cookie);
@@ -173,6 +203,10 @@ async function verifyExpenseLifecycle(cookie, checkingId) {
     notes: "balance integrity"
   });
   assertMoney((await balances(cookie)).checking, 950, "Expense create should decrease checking");
+  const dashboardAfterCreate = await get("/dashboard", cookie);
+  assert(dashboardAfterCreate.text.includes(merchant), "Dashboard recent activity should include created expense");
+  assert(dashboardAfterCreate.text.includes("Monthly Expenses"), "Dashboard should show monthly expense tracking");
+  assert(dashboardAfterCreate.text.includes("$50"), "Dashboard should include created expense amount");
 
   page = await get("/expenses", cookie);
   const editForm = findForm(page.text, (form) => form.includes(merchant) && form.includes('name="expenseId"'), "expense edit");
@@ -189,6 +223,9 @@ async function verifyExpenseLifecycle(cookie, checkingId) {
     notes: "balance integrity edited"
   });
   assertMoney((await balances(cookie)).checking, 930, "Expense edit should reverse and reapply checking");
+  const dashboardAfterEdit = await get("/dashboard", cookie);
+  assert(dashboardAfterEdit.text.includes(merchant), "Dashboard recent activity should include edited expense");
+  assert(dashboardAfterEdit.text.includes("$70"), "Dashboard should include edited expense amount");
 
   page = await get("/expenses", cookie);
   const deleteForm = findForm(page.text, (form) => form.includes(`value="${expenseId}"`) && form.includes("Delete"), "expense delete");
@@ -239,6 +276,9 @@ async function verifyIncomeLifecycle(cookie, checkingId) {
     notes: ""
   });
   assertMoney((await balances(cookie)).checking, 1350, "Income edit should reverse and reapply checking");
+  const dashboardAfterEdit = await get("/dashboard", cookie);
+  assert(dashboardAfterEdit.text.includes(employer), "Dashboard recent activity should include edited income");
+  assert(dashboardAfterEdit.text.includes("$350"), "Dashboard monthly income should include edited deposit amount");
 
   page = await get("/income", cookie);
   const deleteForm = findForm(page.text, (form) => form.includes(`value="${incomeId}"`) && form.includes("Delete"), "income delete");
@@ -315,6 +355,7 @@ async function main() {
   const cookie = await signupFreshHousehold();
   const initial = await setInitialBalances(cookie);
 
+  await verifyAccountManagement(cookie);
   await verifyExpenseLifecycle(cookie, initial.checkingId);
   await verifyIncomeLifecycle(cookie, initial.checkingId);
   await verifyTransferLifecycle(cookie, initial.checkingId, initial.savingsId);

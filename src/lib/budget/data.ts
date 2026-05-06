@@ -3,6 +3,7 @@ import { isoDate, monthBounds, safeFormatDate, safeIsoDate, sixMonthWindow, upco
 import { ensureBillInstancesForRange } from "@/lib/budget/recurrence";
 import {
   incomeTypeLabel,
+  normalizeIncomeFrequency,
   normalizeIncomeRecurrence,
   normalizeIncomeType
 } from "@/lib/budget/income-types";
@@ -301,6 +302,7 @@ export async function getIncomePageData(householdId: string, incomeTypeFilter?: 
       employer: string;
       income_type: IncomeType;
       recurrence: string;
+      income_frequency: string;
       guaranteed: boolean;
       category_id: string | null;
       category_name: string | null;
@@ -320,7 +322,8 @@ export async function getIncomePageData(householdId: string, incomeTypeFilter?: 
     }>(
       `
         SELECT income_entries.id, income_entries.employer, income_entries.income_type,
-               income_entries.recurrence, income_entries.guaranteed, income_entries.category_id,
+               income_entries.recurrence, income_entries.income_frequency,
+               income_entries.guaranteed, income_entries.category_id,
                categories.name AS category_name, categories.color AS category_color,
                income_entries.paycheck_date,
                income_entries.base_pay, income_entries.overtime_pay, income_entries.bonus_pay,
@@ -393,6 +396,7 @@ export async function getIncomePageData(householdId: string, incomeTypeFilter?: 
       incomeType: normalizeIncomeType(row.income_type),
       incomeTypeLabel: incomeTypeLabel(row.income_type),
       recurrence: normalizeIncomeRecurrence(row.recurrence),
+      incomeFrequency: normalizeIncomeFrequency(row.income_frequency),
       guaranteed: asBoolean(row.guaranteed),
       categoryId: asNullableString(row.category_id),
       categoryName: asNullableString(row.category_name),

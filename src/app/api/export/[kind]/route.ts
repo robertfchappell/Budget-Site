@@ -50,7 +50,7 @@ async function exportRows(kind: string, householdId: string) {
       `
         SELECT income_entries.paycheck_date AS date, income_entries.employer,
                income_entries.income_type, income_entries.recurrence,
-               income_entries.guaranteed,
+               income_entries.income_frequency, income_entries.guaranteed,
                income_entries.base_pay, income_entries.overtime_pay,
                income_entries.bonus_pay, income_entries.va_income,
                income_entries.taxes_withheld, income_entries.deposit_amount,

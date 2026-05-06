@@ -354,7 +354,7 @@ async function createEditDeletePlanningGoal(cookie) {
 async function transferBetweenAccounts(cookie) {
   const note = `Smoke Transfer ${Date.now()}`;
   let page = await get("/settings", cookie);
-  const accountForms = forms(page.text).filter((form) => form.includes('name="currentBalance"'));
+  const accountForms = forms(page.text).filter((form) => form.includes('name="currentBalance"') && form.includes('name="accountId"'));
   const checkingForm =
     accountForms.find((form) => form.toLowerCase().includes("checking")) ?? accountForms[0];
   const savingsForm =

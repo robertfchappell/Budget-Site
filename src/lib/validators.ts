@@ -39,6 +39,7 @@ export const incomeSchema = z.object({
     "misc"
   ]),
   recurrence: z.enum(["recurring", "one_time"]).default("one_time"),
+  incomeFrequency: z.enum(["weekly", "biweekly", "monthly", "one_time"]).default("one_time"),
   guaranteed: z.coerce.boolean().default(false),
   paycheckDate: z.string().min(1),
   basePay: money,
@@ -75,6 +76,18 @@ export const savingsGoalSchema = z.object({
 export const accountBalanceSchema = z.object({
   accountId: z.string().uuid(),
   currentBalance: z.coerce.number().finite()
+});
+
+export const accountSchema = z.object({
+  accountName: z.string().trim().min(1, "Account name is required."),
+  accountType: z.enum(["checking", "savings", "credit", "cash"]),
+  currentBalance: z.coerce.number().finite().default(0),
+  institution: z.string().trim().optional().or(z.literal("")),
+  includeInSafeToSpend: z.coerce.boolean().default(true)
+});
+
+export const deleteAccountSchema = z.object({
+  accountId: z.string().uuid()
 });
 
 export const transferSchema = z.object({
