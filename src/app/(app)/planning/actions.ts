@@ -6,6 +6,7 @@ import { query, withTransaction } from "@/lib/db";
 import { getDashboardData } from "@/lib/budget/data";
 import { currentMonthIso } from "@/lib/budget/data";
 import { syncLinkedSavingsGoals } from "@/lib/budget/accounting";
+import { revalidateFinancialPaths } from "@/lib/budget/revalidation";
 import { savingsGoalSchema } from "@/lib/validators";
 
 export async function createSavingsGoal(formData: FormData) {
@@ -134,10 +135,4 @@ export async function saveMonthlySnapshot() {
   );
 
   revalidatePath("/planning");
-}
-
-function revalidateFinancialPaths() {
-  revalidatePath("/planning");
-  revalidatePath("/dashboard");
-  revalidatePath("/settings");
 }

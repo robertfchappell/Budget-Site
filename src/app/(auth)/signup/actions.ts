@@ -31,14 +31,11 @@ export async function signupAction(
   }
 
   const createdUserId = await withTransaction(async (client) => {
-    const existingUser = await client.query<{ id: string }>(
-      "SELECT id FROM users WHERE lower(email) = $1 LIMIT 1",
+    const existingUser = await client.query<{ id: string; deactivated_at: Date | null }>(
+      "SELECT id, deactivated_at FROM users WHERE lower(email) = $1 LIMIT 1",
       [values.email]
     );
-
-    if (existingUser.rows[0]) {
-      return { error: "An account already exists for that email address." } as const;
-    }
+    const existing = existingUser.rows[0];
 
     const passwordHash = await bcrypt.hash(values.password, 12);
 
@@ -83,20 +80,44 @@ export async function signupAction(
         return { error: `This invite is for ${currentInvite.invited_email}.` } as const;
       }
 
-      const user = await client.query<{ id: string }>(
-        `
-          INSERT INTO users (household_id, name, email, password_hash, role)
-          VALUES ($1, $2, $3, $4, $5)
-          RETURNING id
-        `,
-        [
-          currentInvite.household_id,
-          values.name,
-          values.email,
-          passwordHash,
-          currentInvite.invited_role
-        ]
-      );
+      if (existing && !existing.deactivated_at) {
+        return { error: "An active account already exists for that email address." } as const;
+      }
+
+      const user = existing?.deactivated_at
+        ? await client.query<{ id: string }>(
+          `
+            UPDATE users
+            SET household_id = $2,
+                name = $3,
+                password_hash = $4,
+                role = $5,
+                deactivated_at = NULL
+            WHERE id = $1
+            RETURNING id
+          `,
+          [
+            existing.id,
+            currentInvite.household_id,
+            values.name,
+            passwordHash,
+            currentInvite.invited_role
+          ]
+        )
+        : await client.query<{ id: string }>(
+          `
+            INSERT INTO users (household_id, name, email, password_hash, role)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id
+          `,
+          [
+            currentInvite.household_id,
+            values.name,
+            values.email,
+            passwordHash,
+            currentInvite.invited_role
+          ]
+        );
       const userId = user.rows[0]?.id;
 
       if (!userId) {
@@ -109,6 +130,10 @@ export async function signupAction(
       );
 
       return { userId } as const;
+    }
+
+    if (existing) {
+      return { error: "An account already exists for that email address." } as const;
     }
 
     const existingHousehold = await client.query<{ id: string }>(

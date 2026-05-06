@@ -24,7 +24,7 @@ export default async function PlanningPage() {
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-teal-300">
-            Projection
+            Forecast
           </p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">Planning</h1>
         </div>
@@ -39,12 +39,12 @@ export default async function PlanningPage() {
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           icon={Archive}
-          title="Projected End Balance"
+          title="Forecast Checking"
           value={data.dashboard.projection.projectedEndOfMonthBalance}
         />
         <StatCard
           icon={PiggyBank}
-          title="Projected Savings Balance"
+          title="Forecast Savings"
           tone="blue"
           value={data.dashboard.projection.projectedSavingsBalance}
         />
@@ -63,8 +63,8 @@ export default async function PlanningPage() {
       </section>
 
       <section className="grid gap-4 sm:grid-cols-3">
-        <Metric label="Guaranteed Income" value={data.dashboard.projection.guaranteedIncome} />
-        <Metric label="Variable Income" value={data.dashboard.projection.variableIncome} />
+        <Metric label="Recurring Income" value={data.dashboard.projection.guaranteedIncome} />
+        <Metric label="Additional Income" value={data.dashboard.projection.variableIncome} />
         <Metric label="One-Time Income" value={data.dashboard.projection.oneTimeIncome} />
       </section>
 
@@ -209,7 +209,7 @@ export default async function PlanningPage() {
                 <th className="table-cell">Income</th>
                 <th className="table-cell">Bills</th>
                 <th className="table-cell">Expenses</th>
-                <th className="table-cell">Safe</th>
+                <th className="table-cell">Outlook</th>
                 <th className="table-cell">Savings</th>
                 <th className="table-cell">Rollover</th>
               </tr>

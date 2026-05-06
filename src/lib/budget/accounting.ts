@@ -67,7 +67,7 @@ export async function applyAccountDelta(
   const balanceAfter = updated.rows[0]?.current_balance;
 
   if (balanceAfter == null) {
-    return null;
+    throw new Error(`Account ${accountId} was not found for household ${householdId}.`);
   }
 
   await recordAccountActivity(client, {
@@ -116,7 +116,7 @@ export async function setAccountBalance(
   const previousBalance = existing.rows[0]?.current_balance;
 
   if (previousBalance == null) {
-    return null;
+    throw new Error(`Account ${accountId} was not found for household ${householdId}.`);
   }
 
   const delta = currentBalance - asNumber(previousBalance);

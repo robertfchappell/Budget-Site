@@ -6,7 +6,7 @@ export default async function AppLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const user = await requireUser();
+  const user = await requireUser("app_layout");
 
   return (
     <div className="min-h-screen">

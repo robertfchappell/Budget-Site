@@ -59,6 +59,8 @@ Before exposing the app publicly:
 
 - Set a strong `SESSION_SECRET`.
 - Set `APP_URL` and `NEXT_PUBLIC_APP_URL` to the public HTTPS origin, for example `https://budget.example.com`.
+- Leave `AUTH_COOKIE_SECURE=auto` unless you need an explicit override. Local HTTP/LAN gets non-secure cookies; HTTPS proxy/Cloudflare deployments get secure cookies.
+- Keep `SESSION_SECRET` stable across rebuilds and redeploys, or existing sessions will be invalidated.
 - Keep `SEED_DEMO_DATA=false` and `SHOW_DEMO_CREDENTIALS=false`.
 - Change the default PostgreSQL password in `docker-compose.yml` or through environment overrides.
 - Put the app behind HTTPS with your reverse proxy or hosting platform.

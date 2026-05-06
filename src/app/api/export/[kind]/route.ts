@@ -11,7 +11,7 @@ type RouteContext = {
 };
 
 export async function GET(_request: Request, context: RouteContext) {
-  const user = await requireUser();
+  const user = await requireUser("api_export");
   const { kind } = await context.params;
 
   const rows = await exportRows(kind, user.householdId);

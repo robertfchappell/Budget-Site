@@ -1,21 +1,21 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { withTransaction } from "@/lib/db";
 import { applyAccountDelta } from "@/lib/budget/accounting";
-import { defaultGuaranteedForIncomeType, defaultRecurrenceForIncomeType, incomeTypeLabel } from "@/lib/budget/income-types";
+import { revalidateFinancialPaths } from "@/lib/budget/revalidation";
+import {
+  defaultGuaranteedForIncomeType,
+  defaultRecurrenceForIncomeType,
+  incomeTypeLabel,
+  normalizeIncomeType
+} from "@/lib/budget/income-types";
 import { incomeSchema } from "@/lib/validators";
+import type { IncomeType } from "@/lib/types";
 
 export async function createIncomeEntry(formData: FormData) {
   const user = await requireUser();
-  const values = incomeSchema.parse({
-    ...Object.fromEntries(formData),
-    guaranteed: formData.has("guaranteed")
-      ? true
-      : defaultGuaranteedForIncomeType(formData.get("incomeType")),
-    recurrence: String(formData.get("recurrence") || defaultRecurrenceForIncomeType(formData.get("incomeType")))
-  });
+  const values = normalizeIncomeForm(formData);
 
   await withTransaction(async (client) => {
     const categoryId =
@@ -27,9 +27,9 @@ export async function createIncomeEntry(formData: FormData) {
         INSERT INTO income_entries (
           household_id, user_id, account_id, category_id, employer, income_type,
           recurrence, guaranteed, paycheck_date, base_pay,
-          overtime_pay, bonus_pay, va_income, taxes_withheld, deposit_amount, notes
+          overtime_pay, bonus_pay, va_income, taxes_withheld, deposit_amount, notes, term
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       `,
       [
         user.householdId,
@@ -47,7 +47,8 @@ export async function createIncomeEntry(formData: FormData) {
         values.vaIncome,
         values.taxesWithheld,
         values.depositAmount,
-        values.notes || null
+        values.notes || null,
+        values.term || null
       ]
     );
 
@@ -70,11 +71,7 @@ export async function createIncomeEntry(formData: FormData) {
 export async function updateIncomeEntry(formData: FormData) {
   const user = await requireUser();
   const incomeId = String(formData.get("incomeId") ?? "");
-  const values = incomeSchema.parse({
-    ...Object.fromEntries(formData),
-    guaranteed: formData.has("guaranteed"),
-    recurrence: String(formData.get("recurrence") || defaultRecurrenceForIncomeType(formData.get("incomeType")))
-  });
+  const values = normalizeIncomeForm(formData);
 
   await withTransaction(async (client) => {
     const existing = await client.query<{
@@ -118,7 +115,8 @@ export async function updateIncomeEntry(formData: FormData) {
             va_income = $13,
             taxes_withheld = $14,
             deposit_amount = $15,
-            notes = $16
+            notes = $16,
+            term = $17
         WHERE id = $1 AND household_id = $2
       `,
       [
@@ -137,7 +135,8 @@ export async function updateIncomeEntry(formData: FormData) {
         values.vaIncome,
         values.taxesWithheld,
         values.depositAmount,
-        values.notes || null
+        values.notes || null,
+        values.term || null
       ]
     );
 
@@ -229,9 +228,87 @@ async function findIncomeCategoryId(
   return result.rows[0]?.id ?? null;
 }
 
-function revalidateFinancialPaths() {
-  revalidatePath("/income");
-  revalidatePath("/dashboard");
-  revalidatePath("/planning");
-  revalidatePath("/settings");
+function normalizeIncomeForm(formData: FormData) {
+  const incomeType = normalizeIncomeType(formData.get("incomeType"));
+  const recurrence = resolveIncomeRecurrence(formData, incomeType);
+  const parsed = incomeSchema.parse({
+    ...Object.fromEntries(formData),
+    incomeType,
+    recurrence,
+    guaranteed: recurrence === "recurring" && defaultGuaranteedForIncomeType(incomeType)
+  });
+  const employer = displayNameForIncomeType(incomeType, parsed.employer, parsed.term);
+  const guaranteed = parsed.recurrence === "recurring" && defaultGuaranteedForIncomeType(parsed.incomeType);
+  const payroll = normalizePayrollFields(parsed.incomeType, {
+    basePay: parsed.basePay,
+    overtimePay: parsed.overtimePay,
+    bonusPay: parsed.bonusPay,
+    vaIncome: parsed.vaIncome,
+    taxesWithheld: parsed.taxesWithheld,
+    depositAmount: parsed.depositAmount
+  });
+
+  return {
+    ...parsed,
+    ...payroll,
+    employer,
+    guaranteed
+  };
+}
+
+function resolveIncomeRecurrence(formData: FormData, incomeType: IncomeType) {
+  const recurrenceValues = formData.getAll("recurrence").map(String);
+
+  if (recurrenceValues.includes("recurring")) {
+    return "recurring";
+  }
+
+  if (recurrenceValues.includes("one_time")) {
+    return "one_time";
+  }
+
+  return defaultRecurrenceForIncomeType(incomeType);
+}
+
+function displayNameForIncomeType(incomeType: IncomeType, value: string | undefined, term: string | undefined) {
+  const trimmed = value?.trim();
+
+  if (trimmed) {
+    return trimmed;
+  }
+
+  if (incomeType === "pell_grant") {
+    return term ? `Pell Grant - ${term}` : "Pell Grant";
+  }
+
+  if (incomeType === "student_loan") {
+    return term ? `Student Loan - ${term}` : "Student Loan";
+  }
+
+  return incomeTypeLabel(incomeType);
+}
+
+function normalizePayrollFields(
+  incomeType: IncomeType,
+  values: {
+    basePay: number;
+    overtimePay: number;
+    bonusPay: number;
+    vaIncome: number;
+    taxesWithheld: number;
+    depositAmount: number;
+  }
+) {
+  if (incomeType === "regular_paycheck") {
+    return values;
+  }
+
+  return {
+    basePay: 0,
+    overtimePay: incomeType === "overtime" ? values.depositAmount : 0,
+    bonusPay: incomeType === "bonus" ? values.depositAmount : 0,
+    vaIncome: incomeType === "va_disability" ? values.depositAmount : 0,
+    taxesWithheld: 0,
+    depositAmount: values.depositAmount
+  };
 }

@@ -11,7 +11,8 @@
     "lint": "eslint . --max-warnings=0",
     "db:migrate": "node scripts/migrate.mjs",
     "db:seed": "node scripts/seed.mjs",
-    "smoke": "node scripts/smoke-test.mjs"
+    "smoke": "node scripts/smoke-test.mjs",
+    "test:financial": "node scripts/financial-integrity-test.mjs"
   },
   "dependencies": {
     "bcryptjs": "3.0.3",

@@ -4,13 +4,32 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { withTransaction } from "@/lib/db";
 import { applyAccountDelta, setAccountBalance } from "@/lib/budget/accounting";
+import { revalidateFinancialPaths } from "@/lib/budget/revalidation";
 import { todayIso } from "@/lib/dates";
 import { createInviteToken, hashInviteToken, inviteUrl } from "@/lib/households/invites";
-import { accountBalanceSchema, inviteSchema, revokeInviteSchema, transferSchema } from "@/lib/validators";
+import {
+  accountBalanceSchema,
+  inviteSchema,
+  removeMemberSchema,
+  resendInviteSchema,
+  revokeInviteSchema,
+  transferSchema
+} from "@/lib/validators";
+import type { InviteActionStatus } from "@/lib/types";
 
 export type InviteState = {
   error?: string;
   inviteUrl?: string;
+  status?: InviteActionStatus;
+  message?: string;
+};
+
+export type InviteMutationResult = {
+  ok: boolean;
+  error?: string;
+  inviteUrl?: string;
+  status?: InviteActionStatus;
+  message?: string;
 };
 
 export async function updateAccountBalance(formData: FormData) {
@@ -126,13 +145,45 @@ export async function createHouseholdInvite(
   const token = createInviteToken();
 
   const created = await withTransaction(async (client) => {
-    const existingUser = await client.query<{ id: string }>(
-      "SELECT id FROM users WHERE household_id = $1 AND lower(email) = $2 LIMIT 1",
+    const existingUser = await client.query<{
+      id: string;
+      household_id: string;
+      deactivated_at: Date | null;
+    }>(
+      `
+        SELECT id, household_id, deactivated_at
+        FROM users
+        WHERE lower(email) = $1
+        LIMIT 1
+      `,
+      [values.invitedEmail]
+    );
+    const activeUser = existingUser.rows.find((row) => !row.deactivated_at);
+
+    if (activeUser?.household_id === user.householdId) {
+      return { error: "That person already belongs to this household." } as const;
+    }
+
+    if (activeUser) {
+      return { error: "That email already has an active account." } as const;
+    }
+
+    const pendingInvite = await client.query<{ id: string }>(
+      `
+        SELECT id
+        FROM household_invites
+        WHERE household_id = $1
+          AND lower(invited_email) = $2
+          AND accepted_at IS NULL
+          AND revoked_at IS NULL
+          AND expires_at >= now()
+        LIMIT 1
+      `,
       [user.householdId, values.invitedEmail]
     );
 
-    if (existingUser.rows[0]) {
-      return { error: "That person already belongs to this household." } as const;
+    if (pendingInvite.rows[0]) {
+      return { error: "That email already has a pending invite. Resend it instead." } as const;
     }
 
     await client.query(
@@ -153,23 +204,27 @@ export async function createHouseholdInvite(
       ]
     );
 
-    return { inviteUrl: inviteUrl(token) } as const;
+    return {
+      inviteUrl: inviteUrl(token),
+      status: "created",
+      message: "Invite created."
+    } as const;
   });
 
   revalidatePath("/settings");
   return created;
 }
 
-export async function revokeHouseholdInvite(formData: FormData) {
+export async function revokeHouseholdInvite(formData: FormData): Promise<InviteMutationResult> {
   const user = await requireUser();
   const parsed = revokeInviteSchema.safeParse(Object.fromEntries(formData));
 
   if (!parsed.success) {
-    return;
+    return { ok: false, error: "Invite could not be revoked." };
   }
 
-  await withTransaction(async (client) => {
-    await client.query(
+  const revoked = await withTransaction(async (client) => {
+    const result = await client.query(
       `
         UPDATE household_invites
         SET revoked_at = now()
@@ -180,16 +235,103 @@ export async function revokeHouseholdInvite(formData: FormData) {
       `,
       [parsed.data.inviteId, user.householdId]
     );
+
+    return Number(result.rowCount ?? 0) > 0;
   });
 
   revalidatePath("/settings");
+  return revoked
+    ? { ok: true, status: "revoked", message: "Invite revoked." }
+    : { ok: false, error: "That invite is no longer pending." };
 }
 
-function revalidateFinancialPaths() {
+export async function resendHouseholdInvite(formData: FormData): Promise<InviteMutationResult> {
+  const user = await requireUser();
+  const parsed = resendInviteSchema.safeParse(Object.fromEntries(formData));
+
+  if (!parsed.success) {
+    return { ok: false, error: "Invite could not be resent." };
+  }
+
+  const token = createInviteToken();
+  const result = await withTransaction(async (client) => {
+    const invite = await client.query<{ id: string; invited_email: string }>(
+      `
+        SELECT id, invited_email
+        FROM household_invites
+        WHERE id = $1
+          AND household_id = $2
+          AND accepted_at IS NULL
+          AND revoked_at IS NULL
+          AND expires_at >= now()
+        FOR UPDATE
+      `,
+      [parsed.data.inviteId, user.householdId]
+    );
+
+    if (!invite.rows[0]) {
+      return { ok: false, error: "That invite is no longer pending." } as const;
+    }
+
+    await client.query(
+      `
+        UPDATE household_invites
+        SET token_hash = $3,
+            invited_by_user_id = $4,
+            expires_at = now() + ($5::int * INTERVAL '1 day'),
+            created_at = now()
+        WHERE id = $1 AND household_id = $2
+      `,
+      [
+        parsed.data.inviteId,
+        user.householdId,
+        hashInviteToken(token),
+        user.id,
+        parsed.data.expiresInDays
+      ]
+    );
+
+    return {
+      ok: true,
+      status: "resent",
+      message: "Invite resent.",
+      inviteUrl: inviteUrl(token)
+    } as const;
+  });
+
   revalidatePath("/settings");
-  revalidatePath("/dashboard");
-  revalidatePath("/planning");
-  revalidatePath("/bills");
-  revalidatePath("/income");
-  revalidatePath("/expenses");
+  return result;
+}
+
+export async function removeHouseholdMember(formData: FormData): Promise<InviteMutationResult> {
+  const user = await requireUser();
+  const parsed = removeMemberSchema.safeParse(Object.fromEntries(formData));
+
+  if (!parsed.success) {
+    return { ok: false, error: "Member could not be removed." };
+  }
+
+  if (parsed.data.memberId === user.id) {
+    return { ok: false, error: "You cannot remove your own account." };
+  }
+
+  const removed = await withTransaction(async (client) => {
+    const result = await client.query(
+      `
+        UPDATE users
+        SET deactivated_at = now()
+        WHERE id = $1
+          AND household_id = $2
+          AND deactivated_at IS NULL
+      `,
+      [parsed.data.memberId, user.householdId]
+    );
+
+    return Number(result.rowCount ?? 0) > 0;
+  });
+
+  revalidatePath("/settings");
+  return removed
+    ? { ok: true, status: "member_removed", message: "Member removed." }
+    : { ok: false, error: "That member is no longer active." };
 }

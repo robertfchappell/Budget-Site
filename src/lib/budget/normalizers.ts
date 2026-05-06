@@ -33,7 +33,7 @@ export function normalizeCategoryKind(value: unknown): Category["kind"] {
 export function normalizeBillFrequency(value: unknown): RecurringBill["frequency"] {
   const frequency = asString(value, "monthly");
 
-  if (frequency === "weekly" || frequency === "yearly") {
+  if (frequency === "weekly" || frequency === "biweekly" || frequency === "yearly" || frequency === "one_time") {
     return frequency;
   }
 

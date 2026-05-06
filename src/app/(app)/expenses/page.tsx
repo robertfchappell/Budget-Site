@@ -13,6 +13,8 @@ export const dynamic = "force-dynamic";
 export default async function ExpensesPage() {
   const user = await requireUser();
   const data = await getExpensesPageData(user.householdId);
+  const defaultExpenseAccountId =
+    data.accounts.find((account) => account.type === "checking")?.id ?? data.accounts[0]?.id ?? "";
 
   return (
     <div className="space-y-6">
@@ -63,8 +65,8 @@ export default async function ExpensesPage() {
               <label className="label" htmlFor="accountId">
                 Account
               </label>
-              <select className="field" id="accountId" name="accountId">
-                <option value="">No account update</option>
+              <select className="field" defaultValue={defaultExpenseAccountId} id="accountId" name="accountId">
+                <option value="">Manual / no balance update</option>
                 {data.accounts.map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.name}
@@ -107,8 +109,8 @@ export default async function ExpensesPage() {
                   type="file"
                 />
               </div>
-              <select className="field" name="accountId">
-                <option value="">No account update</option>
+              <select className="field" defaultValue={defaultExpenseAccountId} name="accountId">
+                <option value="">Manual / no balance update</option>
                 {data.accounts.map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.name}
@@ -189,7 +191,7 @@ export default async function ExpensesPage() {
                             <option value="other">Other</option>
                           </select>
                           <select className="field" defaultValue={expense.accountId ?? ""} name="accountId">
-                            <option value="">No account update</option>
+                            <option value="">Manual / no balance update</option>
                             {data.accounts.map((account) => (
                               <option key={account.id} value={account.id}>
                                 {account.name}

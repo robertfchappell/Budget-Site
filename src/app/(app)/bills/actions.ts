@@ -1,10 +1,11 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { query, withTransaction } from "@/lib/db";
 import { applyAccountDelta } from "@/lib/budget/accounting";
+import { revalidateFinancialPaths } from "@/lib/budget/revalidation";
 import { ensureBillInstancesForRange } from "@/lib/budget/recurrence";
+import { isoDate, safeIsoDate, todayIso } from "@/lib/dates";
 import { billInstanceSchema, recurringBillSchema } from "@/lib/validators";
 
 export async function createRecurringBill(formData: FormData) {
@@ -15,13 +16,9 @@ export async function createRecurringBill(formData: FormData) {
     isSubscription: formData.has("isSubscription")
   });
 
-  const startDate = new Date(`${values.startDate}T00:00:00`);
-  const dueDay =
-    values.frequency === "monthly"
-      ? values.dueDay ?? startDate.getDate()
-      : values.dueDay ?? null;
+  const schedule = resolveBillSchedule(values);
 
-  await query(
+  const result = await query<{ id: string }>(
     `
       INSERT INTO recurring_bills (
         household_id, category_id, account_id, name, amount, frequency,
@@ -41,6 +38,7 @@ export async function createRecurringBill(formData: FormData) {
         is_subscription = EXCLUDED.is_subscription,
         notes = EXCLUDED.notes,
         active = true
+      RETURNING id
     `,
     [
       user.householdId,
@@ -49,17 +47,30 @@ export async function createRecurringBill(formData: FormData) {
       values.name,
       values.amount,
       values.frequency,
-      values.startDate,
-      dueDay,
+      schedule.startDate,
+      schedule.dueDay,
       values.autopay,
       values.isSubscription,
       values.notes || null
     ]
   );
 
+  const billId = result.rows[0]?.id;
+
+  if (billId) {
+    await query(
+      `
+        DELETE FROM bill_instances
+        WHERE recurring_bill_id = $1
+          AND household_id = $2
+          AND status = 'unpaid'
+      `,
+      [billId, user.householdId]
+    );
+  }
+
   await ensureBillInstancesForRange(user.householdId);
-  revalidatePath("/bills");
-  revalidatePath("/dashboard");
+  revalidateFinancialPaths();
 }
 
 export async function updateRecurringBill(formData: FormData) {
@@ -70,11 +81,7 @@ export async function updateRecurringBill(formData: FormData) {
     autopay: formData.has("autopay"),
     isSubscription: formData.has("isSubscription")
   });
-  const startDate = new Date(`${values.startDate}T00:00:00`);
-  const dueDay =
-    values.frequency === "monthly"
-      ? values.dueDay ?? startDate.getDate()
-      : values.dueDay ?? null;
+  const schedule = resolveBillSchedule(values);
 
   await query(
     `
@@ -100,8 +107,8 @@ export async function updateRecurringBill(formData: FormData) {
       values.name,
       values.amount,
       values.frequency,
-      values.startDate,
-      dueDay,
+      schedule.startDate,
+      schedule.dueDay,
       values.autopay,
       values.isSubscription,
       values.notes || null
@@ -110,30 +117,17 @@ export async function updateRecurringBill(formData: FormData) {
 
   await query(
     `
-      UPDATE bill_instances
-      SET category_id = $3,
-          account_id = $4,
-          bill_name = $5,
-          amount = $6,
-          notes = $7
+      DELETE FROM bill_instances
       WHERE recurring_bill_id = $1
         AND household_id = $2
         AND status = 'unpaid'
     `,
-    [
-      billId,
-      user.householdId,
-      values.categoryId || null,
-      values.accountId || null,
-      values.name,
-      values.amount,
-      values.notes || null
-    ]
+    [billId, user.householdId]
   );
 
-  revalidatePath("/bills");
-  revalidatePath("/dashboard");
-  revalidatePath("/planning");
+  await ensureBillInstancesForRange(user.householdId);
+
+  revalidateFinancialPaths();
 }
 
 export async function archiveRecurringBill(formData: FormData) {
@@ -149,9 +143,7 @@ export async function archiveRecurringBill(formData: FormData) {
     [billId, user.householdId]
   );
 
-  revalidatePath("/bills");
-  revalidatePath("/dashboard");
-  revalidatePath("/planning");
+  revalidateFinancialPaths();
 }
 
 export async function deleteRecurringBill(formData: FormData) {
@@ -163,9 +155,7 @@ export async function deleteRecurringBill(formData: FormData) {
     [billId, user.householdId]
   );
 
-  revalidatePath("/bills");
-  revalidatePath("/dashboard");
-  revalidatePath("/planning");
+  revalidateFinancialPaths();
 }
 
 export async function updateBillInstance(formData: FormData) {
@@ -283,7 +273,7 @@ export async function deleteBillInstance(formData: FormData) {
         amount: bill.amount,
         activityType: "bill_payment",
         description: `Deleted paid bill: ${bill.bill_name}`,
-        activityDate: String(bill.due_date)
+        activityDate: safeIsoDate(bill.due_date, todayIso())
       });
     }
 
@@ -337,7 +327,7 @@ export async function markBillPaid(formData: FormData) {
         amount: -bill.amount,
         activityType: "bill_payment",
         description: `Bill payment: ${bill.bill_name}`,
-        activityDate: String(bill.due_date)
+        activityDate: safeIsoDate(bill.due_date, todayIso())
       });
     }
   });
@@ -386,7 +376,7 @@ export async function markBillUnpaid(formData: FormData) {
         amount: bill.amount,
         activityType: "bill_payment",
         description: `Bill unpaid reversal: ${bill.bill_name}`,
-        activityDate: String(bill.due_date)
+        activityDate: safeIsoDate(bill.due_date, todayIso())
       });
     }
   });
@@ -394,9 +384,64 @@ export async function markBillUnpaid(formData: FormData) {
   revalidateFinancialPaths();
 }
 
-function revalidateFinancialPaths() {
-  revalidatePath("/bills");
-  revalidatePath("/dashboard");
-  revalidatePath("/planning");
-  revalidatePath("/settings");
+function resolveBillSchedule(values: {
+  frequency: "monthly" | "weekly" | "biweekly" | "yearly" | "one_time";
+  startDate?: string;
+  dueDate?: string;
+  dueDay?: number;
+  weekday?: number;
+  yearlyMonth?: number;
+  yearlyDay?: number;
+}) {
+  const baseDate = parseDateInput(values.startDate || values.dueDate || todayIso());
+
+  if (values.frequency === "monthly") {
+    return {
+      startDate: isoDate(baseDate),
+      dueDay: values.dueDay ?? baseDate.getDate()
+    };
+  }
+
+  if (values.frequency === "weekly") {
+    return {
+      startDate: isoDate(nextWeekday(values.weekday ?? baseDate.getDay())),
+      dueDay: null
+    };
+  }
+
+  if (values.frequency === "biweekly") {
+    return {
+      startDate: isoDate(parseDateInput(values.startDate || values.dueDate || todayIso())),
+      dueDay: null
+    };
+  }
+
+  if (values.frequency === "yearly") {
+    const month = values.yearlyMonth ?? baseDate.getMonth() + 1;
+    const day = values.yearlyDay ?? baseDate.getDate();
+    const year = baseDate.getFullYear();
+    const maxDay = new Date(year, month, 0).getDate();
+
+    return {
+      startDate: isoDate(new Date(year, month - 1, Math.min(day, maxDay))),
+      dueDay: null
+    };
+  }
+
+  return {
+    startDate: isoDate(parseDateInput(values.dueDate || values.startDate || todayIso())),
+    dueDay: null
+  };
+}
+
+function parseDateInput(value: string) {
+  const parsed = new Date(`${value}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? new Date(`${todayIso()}T00:00:00`) : parsed;
+}
+
+function nextWeekday(weekday: number) {
+  const date = parseDateInput(todayIso());
+  const offset = (weekday - date.getDay() + 7) % 7;
+  date.setDate(date.getDate() + offset);
+  return date;
 }

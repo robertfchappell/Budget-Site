@@ -6,7 +6,7 @@ import {
   normalizeIncomeRecurrence,
   normalizeIncomeType
 } from "@/lib/budget/income-types";
-import { getFinancialAccounts, getFinancialState } from "@/lib/budget/financial-state";
+import { getFinancialAccounts, getFinancialState, getMonthlyFinancialRollups } from "@/lib/budget/financial-state";
 import {
   normalizeAccountType,
   normalizeBillFrequency,
@@ -77,9 +77,11 @@ export async function getDashboardData(householdId: string) {
 
   const [
     upcomingBills,
+    upcomingDeposits,
     spendingByCategory,
     trend,
-    savingsGoals
+    savingsGoals,
+    recentActivity
   ] = await Promise.all([
     queryBillInstances(
       `
@@ -89,6 +91,29 @@ export async function getDashboardData(householdId: string) {
           AND bill_instances.status = 'unpaid'
         ORDER BY bill_instances.due_date ASC, bill_instances.bill_name ASC
         LIMIT 8
+      `,
+      [householdId, upcoming.startIso, upcoming.endIso]
+    ),
+    query<{
+      id: string;
+      employer: string;
+      income_type: IncomeType;
+      recurrence: string;
+      paycheck_date: string;
+      deposit_amount: number;
+      account_name: string | null;
+    }>(
+      `
+        SELECT income_entries.id, income_entries.employer, income_entries.income_type,
+               income_entries.recurrence, income_entries.paycheck_date,
+               income_entries.deposit_amount, accounts.name AS account_name
+        FROM income_entries
+        LEFT JOIN accounts ON accounts.id = income_entries.account_id
+        WHERE income_entries.household_id = $1
+          AND income_entries.paycheck_date >= $2
+          AND income_entries.paycheck_date <= $3
+        ORDER BY income_entries.paycheck_date ASC, income_entries.deposit_amount DESC
+        LIMIT 6
       `,
       [householdId, upcoming.startIso, upcoming.endIso]
     ),
@@ -109,47 +134,33 @@ export async function getDashboardData(householdId: string) {
       `,
       [householdId, month.startIso, month.endIso]
     ),
+    getMonthlyFinancialRollups(householdId, trendWindow.startIso, trendWindow.endIso),
+    querySavingsGoals(householdId),
     query<{
-      month: string;
-      income: number;
-      expenses: number;
-      bills: number;
+      id: string;
+      account_id: string;
+      account_name: string;
+      activity_type: string;
+      amount: number;
+      balance_after: number;
+      description: string;
+      activity_date: string;
+      user_name: string | null;
     }>(
       `
-        WITH months AS (
-          SELECT generate_series($2::date, ($3::date - INTERVAL '1 day')::date, INTERVAL '1 month')::date AS month
-        ),
-        income AS (
-          SELECT date_trunc('month', paycheck_date)::date AS month, SUM(deposit_amount) AS total
-          FROM income_entries
-          WHERE household_id = $1 AND paycheck_date >= $2 AND paycheck_date < $3
-          GROUP BY 1
-        ),
-        expenses AS (
-          SELECT date_trunc('month', expense_date)::date AS month, SUM(amount) AS total
-          FROM expenses
-          WHERE household_id = $1 AND expense_date >= $2 AND expense_date < $3
-          GROUP BY 1
-        ),
-        bills AS (
-          SELECT date_trunc('month', due_date)::date AS month, SUM(amount) AS total
-          FROM bill_instances
-          WHERE household_id = $1 AND due_date >= $2 AND due_date < $3 AND status <> 'skipped'
-          GROUP BY 1
-        )
-        SELECT months.month::text,
-               COALESCE(income.total, 0) AS income,
-               COALESCE(expenses.total, 0) AS expenses,
-               COALESCE(bills.total, 0) AS bills
-        FROM months
-        LEFT JOIN income ON income.month = months.month
-        LEFT JOIN expenses ON expenses.month = months.month
-        LEFT JOIN bills ON bills.month = months.month
-        ORDER BY months.month
+        SELECT account_activity.id, account_activity.account_id, accounts.name AS account_name,
+               account_activity.activity_type, account_activity.amount,
+               account_activity.balance_after, account_activity.description,
+               account_activity.activity_date, users.name AS user_name
+        FROM account_activity
+        JOIN accounts ON accounts.id = account_activity.account_id
+        LEFT JOIN users ON users.id = account_activity.user_id
+        WHERE account_activity.household_id = $1
+        ORDER BY account_activity.activity_date DESC, account_activity.created_at DESC
+        LIMIT 8
       `,
-      [householdId, trendWindow.startIso, trendWindow.endIso]
-    ),
-    querySavingsGoals(householdId)
+      [householdId]
+    )
   ]);
 
   return {
@@ -168,18 +179,39 @@ export async function getDashboardData(householdId: string) {
     unpaidBillsRemaining: financial.unpaidBillsRemaining,
     monthlySavingsTarget: financial.monthlySavingsTarget,
     upcomingBills,
+    upcomingDeposits: upcomingDeposits.rows.map((row) => ({
+      id: asString(row.id),
+      employer: asString(row.employer, "Income"),
+      incomeType: normalizeIncomeType(row.income_type),
+      incomeTypeLabel: incomeTypeLabel(row.income_type),
+      recurrence: normalizeIncomeRecurrence(row.recurrence),
+      paycheckDate: safeIsoDate(row.paycheck_date),
+      depositAmount: asNumber(row.deposit_amount),
+      accountName: asNullableString(row.account_name)
+    })),
     spendingByCategory: spendingByCategory.rows.map((row) => ({
       name: asString(row.name, "Uncategorized"),
       value: asNumber(row.total),
       color: normalizeColor(row.color)
     })) satisfies ChartDatum[],
     savingsGoals,
+    recentActivity: recentActivity.rows.map((row) => ({
+      id: asString(row.id),
+      accountId: asString(row.account_id),
+      accountName: asString(row.account_name, "Account"),
+      activityType: asString(row.activity_type, "activity"),
+      amount: asNumber(row.amount),
+      balanceAfter: asNumber(row.balance_after),
+      description: asString(row.description, "Account activity"),
+      activityDate: safeIsoDate(row.activity_date),
+      userName: asNullableString(row.user_name)
+    })) satisfies AccountActivity[],
     incomeByType: financial.incomeByType,
-    trend: trend.rows.map((row) => ({
+    trend: trend.map((row) => ({
       month: safeFormatDate(row.month, "MMM", "N/A"),
-      income: asNumber(row.income),
-      expenses: asNumber(row.expenses),
-      bills: asNumber(row.bills)
+      income: row.income,
+      expenses: row.expenses,
+      bills: row.bills
     })) satisfies TrendDatum[],
     projection: financial.projection
   };
@@ -281,6 +313,7 @@ export async function getIncomePageData(householdId: string, incomeTypeFilter?: 
       taxes_withheld: number;
       deposit_amount: number;
       notes: string | null;
+      term: string | null;
       user_name: string;
       account_name: string | null;
       account_id: string | null;
@@ -292,7 +325,7 @@ export async function getIncomePageData(householdId: string, incomeTypeFilter?: 
                income_entries.paycheck_date,
                income_entries.base_pay, income_entries.overtime_pay, income_entries.bonus_pay,
                income_entries.va_income, income_entries.taxes_withheld, income_entries.deposit_amount,
-               income_entries.notes, users.name AS user_name, accounts.name AS account_name,
+               income_entries.notes, income_entries.term, users.name AS user_name, accounts.name AS account_name,
                accounts.id AS account_id
         FROM income_entries
         JOIN users ON users.id = income_entries.user_id
@@ -372,6 +405,7 @@ export async function getIncomePageData(householdId: string, incomeTypeFilter?: 
       taxesWithheld: asNumber(row.taxes_withheld),
       depositAmount: asNumber(row.deposit_amount),
       notes: asNullableString(row.notes),
+      term: asNullableString(row.term),
       userName: asString(row.user_name, "Household"),
       accountName: asNullableString(row.account_name),
       accountId: asNullableString(row.account_id)
@@ -430,27 +464,7 @@ export async function getExpensesPageData(householdId: string) {
       `,
       [householdId, month.startIso, month.endIso]
     ),
-    query<{
-      month: string;
-      total: number;
-    }>(
-      `
-        WITH months AS (
-          SELECT generate_series($2::date, ($3::date - INTERVAL '1 day')::date, INTERVAL '1 month')::date AS month
-        ),
-        expenses AS (
-          SELECT date_trunc('month', expense_date)::date AS month, SUM(amount) AS total
-          FROM expenses
-          WHERE household_id = $1 AND expense_date >= $2 AND expense_date < $3
-          GROUP BY 1
-        )
-        SELECT months.month::text, COALESCE(expenses.total, 0) AS total
-        FROM months
-        LEFT JOIN expenses ON expenses.month = months.month
-        ORDER BY months.month
-      `,
-      [householdId, trendWindow.startIso, trendWindow.endIso]
-    )
+    getMonthlyFinancialRollups(householdId, trendWindow.startIso, trendWindow.endIso)
   ]);
 
   return {
@@ -463,11 +477,11 @@ export async function getExpensesPageData(householdId: string) {
       value: asNumber(row.total),
       color: normalizeColor(row.color)
     })) satisfies ChartDatum[],
-    trend: trend.rows.map((row) => ({
+    trend: trend.map((row) => ({
       month: safeFormatDate(row.month, "MMM", "N/A"),
-      income: 0,
-      expenses: asNumber(row.total),
-      bills: 0
+      income: row.income,
+      expenses: row.expenses,
+      bills: row.bills
     })) satisfies TrendDatum[]
   };
 }
@@ -600,7 +614,7 @@ export async function getSettingsPageData(householdId: string) {
       `
         SELECT id, name, email, role, created_at
         FROM users
-        WHERE household_id = $1
+        WHERE household_id = $1 AND deactivated_at IS NULL
         ORDER BY created_at ASC, name ASC
       `,
       [householdId]
@@ -623,6 +637,9 @@ export async function getSettingsPageData(householdId: string) {
         FROM household_invites
         LEFT JOIN users AS invited_by ON invited_by.id = household_invites.invited_by_user_id
         WHERE household_invites.household_id = $1
+          AND household_invites.accepted_at IS NULL
+          AND household_invites.revoked_at IS NULL
+          AND household_invites.expires_at >= now()
         ORDER BY household_invites.created_at DESC
         LIMIT 25
       `,

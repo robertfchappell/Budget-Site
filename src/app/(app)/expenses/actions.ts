@@ -1,10 +1,10 @@
 "use server";
 
 import Papa from "papaparse";
-import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { query, withTransaction } from "@/lib/db";
 import { applyAccountDelta } from "@/lib/budget/accounting";
+import { revalidateFinancialPaths } from "@/lib/budget/revalidation";
 import { expenseSchema } from "@/lib/validators";
 import type { PaymentMethod } from "@/lib/types";
 
@@ -307,11 +307,4 @@ function normalizePaymentMethod(value: string | undefined): PaymentMethod {
   }
 
   return "other";
-}
-
-function revalidateFinancialPaths() {
-  revalidatePath("/expenses");
-  revalidatePath("/dashboard");
-  revalidatePath("/planning");
-  revalidatePath("/settings");
 }

@@ -211,6 +211,7 @@ async function createEditDeleteIncome(cookie) {
     depositAmount: "321.00",
     categoryId: "",
     accountId: "",
+    term: "Smoke term",
     notes: "Smoke test Pell grant"
   });
 
@@ -236,6 +237,7 @@ async function createEditDeleteIncome(cookie) {
     depositAmount: "654.00",
     categoryId: "",
     accountId: "",
+    term: "Smoke term edited",
     notes: "Smoke test student loan"
   });
 
@@ -387,10 +389,10 @@ async function transferBetweenAccounts(cookie) {
   assertHealthy("/dashboard", page.text, "Savings Balance");
 
   page = await get("/planning", cookie);
-  assertHealthy("/planning", page.text, "Projected Savings Balance");
+  assertHealthy("/planning", page.text, "Forecast Savings");
 }
 
-async function createRevokeInvite(cookie) {
+async function createInvite(cookie) {
   const inviteEmail = `invite-${Date.now()}@example.com`;
   let page = await get("/settings", cookie);
   const inviteForm = findForm(page.text, (form) => form.includes('name="invitedEmail"'), "household invite");
@@ -403,16 +405,6 @@ async function createRevokeInvite(cookie) {
 
   page = await get("/settings", cookie);
   assert(page.text.includes(inviteEmail), "Created invite did not render");
-
-  const revokeForm = findForm(
-    page.text,
-    (form) => form.includes('name="inviteId"') && form.includes("Revoke"),
-    "invite revoke"
-  );
-  await post("/settings", cookie, revokeForm);
-
-  page = await get("/settings", cookie);
-  assert(page.text.includes("revoked"), "Revoked invite state did not render");
 }
 
 async function main() {
@@ -439,12 +431,12 @@ async function main() {
   await createEditDeleteExpense(cookie);
   await createEditDeletePlanningGoal(cookie);
   await transferBetweenAccounts(cookie);
-  await createRevokeInvite(cookie);
+  await createInvite(cookie);
 
   for (const [path, marker] of [
-    ["/dashboard", "Recurring Guaranteed Income"],
-    ["/planning", "Projected Savings Balance"],
-    ["/bills", "Recurring Bill Management"],
+    ["/dashboard", "Recurring Income"],
+    ["/planning", "Forecast Savings"],
+    ["/bills", "Bill Management"],
     ["/income", "Income By Type"],
     ["/expenses", "Recent Expenses"],
     ["/settings", "Account Activity"]

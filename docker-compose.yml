@@ -27,6 +27,9 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-budget}:${POSTGRES_PASSWORD:-budget}@postgres:5432/${POSTGRES_DB:-family_budget}
       PGPOOL_MAX: ${PGPOOL_MAX:-4}
       SESSION_SECRET: ${SESSION_SECRET:-replace-this-local-secret-before-production}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-auto}
+      AUTH_LOG_LEVEL: ${AUTH_LOG_LEVEL:-info}
+      REQUIRE_STRONG_SESSION_SECRET: ${REQUIRE_STRONG_SESSION_SECRET:-false}
       APP_URL: ${APP_URL:-http://localhost:3000}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
       NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Family Budget}

@@ -32,7 +32,7 @@ export default async function SettingsPage() {
         <Metric icon={ArrowDownUp} label="Total Net Cash" value={data.financial.netCash} />
       </section>
 
-      <HouseholdInvites invites={data.invites} members={data.members} />
+      <HouseholdInvites currentUserId={user.id} invites={data.invites} members={data.members} />
 
       <section className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
         <article className="panel p-4">

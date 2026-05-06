@@ -55,16 +55,25 @@ function generateDates(
     return dates;
   }
 
-  const increment = normalizedFrequency === "weekly" ? addWeeks : addYears;
+  if (normalizedFrequency === "one_time") {
+    if (first >= rangeStart && first <= rangeEnd) {
+      dates.push(first);
+    }
+
+    return dates;
+  }
+
+  const increment = normalizedFrequency === "yearly" ? addYears : addWeeks;
+  const incrementBy = normalizedFrequency === "biweekly" ? 2 : 1;
   let cursor = first;
 
   while (cursor < rangeStart) {
-    cursor = increment(cursor, 1);
+    cursor = increment(cursor, incrementBy);
   }
 
   while (cursor <= rangeEnd) {
     dates.push(cursor);
-    cursor = increment(cursor, 1);
+    cursor = increment(cursor, incrementBy);
   }
 
   return dates;
@@ -73,7 +82,7 @@ function generateDates(
 function normalizeFrequency(value: unknown): BillFrequency {
   const frequency = asString(value, "monthly");
 
-  if (frequency === "weekly" || frequency === "yearly") {
+  if (frequency === "weekly" || frequency === "biweekly" || frequency === "yearly" || frequency === "one_time") {
     return frequency;
   }
 

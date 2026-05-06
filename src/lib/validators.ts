@@ -1,15 +1,24 @@
 import { z } from "zod";
 
 const money = z.coerce.number().finite().min(0).default(0);
+const optionalInt = (min: number, max: number) =>
+  z.preprocess(
+    (value) => (value === "" || value == null ? undefined : value),
+    z.coerce.number().int().min(min).max(max).optional()
+  );
 const password = z.string().min(8, "Password must be at least 8 characters.");
 const role = z.enum(["husband", "wife"]);
 
 export const recurringBillSchema = z.object({
   name: z.string().trim().min(1),
   amount: money,
-  frequency: z.enum(["monthly", "weekly", "yearly"]),
-  startDate: z.string().min(1),
-  dueDay: z.coerce.number().int().min(1).max(31).optional(),
+  frequency: z.enum(["monthly", "weekly", "biweekly", "yearly", "one_time"]),
+  startDate: z.string().optional().or(z.literal("")),
+  dueDate: z.string().optional().or(z.literal("")),
+  dueDay: optionalInt(1, 31),
+  weekday: optionalInt(0, 6),
+  yearlyMonth: optionalInt(1, 12),
+  yearlyDay: optionalInt(1, 31),
   categoryId: z.string().uuid().optional().or(z.literal("")),
   accountId: z.string().uuid().optional().or(z.literal("")),
   autopay: z.coerce.boolean().default(false),
@@ -18,7 +27,7 @@ export const recurringBillSchema = z.object({
 });
 
 export const incomeSchema = z.object({
-  employer: z.string().trim().min(1),
+  employer: z.string().trim().optional().or(z.literal("")),
   incomeType: z.enum([
     "regular_paycheck",
     "overtime",
@@ -40,6 +49,7 @@ export const incomeSchema = z.object({
   depositAmount: money,
   accountId: z.string().uuid().optional().or(z.literal("")),
   categoryId: z.string().uuid().optional().or(z.literal("")),
+  term: z.string().trim().optional(),
   notes: z.string().trim().optional()
 });
 
@@ -105,4 +115,13 @@ export const inviteSchema = z.object({
 
 export const revokeInviteSchema = z.object({
   inviteId: z.string().uuid()
+});
+
+export const resendInviteSchema = z.object({
+  inviteId: z.string().uuid(),
+  expiresInDays: z.coerce.number().int().min(1).max(30).default(7)
+});
+
+export const removeMemberSchema = z.object({
+  memberId: z.string().uuid()
 });

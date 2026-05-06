@@ -24,7 +24,7 @@ export async function loginAction(
     id: string;
     password_hash: string;
   }>(
-    "SELECT id, password_hash FROM users WHERE lower(email) = $1",
+    "SELECT id, password_hash FROM users WHERE lower(email) = $1 AND deactivated_at IS NULL",
     [email]
   );
 

@@ -1,7 +1,7 @@
 export type UserRole = "husband" | "wife";
 export type AccountType = "checking" | "savings" | "credit" | "cash";
 export type CategoryKind = "income" | "bill" | "expense" | "savings";
-export type BillFrequency = "monthly" | "weekly" | "yearly";
+export type BillFrequency = "monthly" | "weekly" | "biweekly" | "yearly" | "one_time";
 export type BillStatus = "unpaid" | "paid" | "skipped";
 export type PaymentMethod = "cash" | "debit" | "credit" | "ach" | "check" | "other";
 export type IncomeType =
@@ -93,6 +93,7 @@ export type IncomeEntry = {
   taxesWithheld: number;
   depositAmount: number;
   notes: string | null;
+  term: string | null;
   userName: string;
   accountId: string | null;
   accountName: string | null;
@@ -165,6 +166,8 @@ export type HouseholdInvite = {
   revokedAt: string | null;
   createdAt: string;
 };
+
+export type InviteActionStatus = "created" | "revoked" | "resent" | "member_removed";
 
 export type ChartDatum = {
   name: string;

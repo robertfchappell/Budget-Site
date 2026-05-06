@@ -9,11 +9,12 @@ import {
   deleteRecurringBill,
   markBillPaid,
   markBillUnpaid,
-  updateBillInstance,
-  updateRecurringBill
+  updateBillInstance
 } from "@/app/(app)/bills/actions";
+import { BillForm } from "@/components/bill-form";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { asArray } from "@/lib/coerce";
+import { describeBillSchedule } from "@/lib/budget/bill-schedules";
 import { safeIsoDate, todayIso } from "@/lib/dates";
 import { dollars } from "@/lib/money";
 import type { Account, BillInstance, Category, RecurringBill } from "@/lib/types";
@@ -207,64 +208,10 @@ export function BillCalendar({
               {selectedRecurringBill ? (
                 <section className="rounded-md border border-slate-800 bg-slate-900/50 p-4">
                   <h4 className="font-bold text-white">Recurring Settings</h4>
-                  <form action={updateRecurringBill} className="mt-4 grid gap-3 sm:grid-cols-2" onSubmit={() => setSelectedId(null)}>
-                    <input name="billId" type="hidden" value={selectedRecurringBill.id} />
-                    <Field defaultValue={selectedRecurringBill.name} label="Bill name" name="name" required />
-                    <Field defaultValue={selectedRecurringBill.amount} label="Amount" name="amount" required step="0.01" type="number" />
-                    <div>
-                      <label className="label" htmlFor={`recurring-frequency-${selectedRecurringBill.id}`}>
-                        Frequency
-                      </label>
-                      <select
-                        className="field"
-                        defaultValue={selectedRecurringBill.frequency}
-                        id={`recurring-frequency-${selectedRecurringBill.id}`}
-                        name="frequency"
-                      >
-                        <option value="monthly">Monthly</option>
-                        <option value="weekly">Weekly</option>
-                        <option value="yearly">Yearly</option>
-                      </select>
-                    </div>
-                    <Field defaultValue={selectedRecurringBill.startDate} label="Start date" name="startDate" required type="date" />
-                    <Field defaultValue={selectedRecurringBill.dueDay ?? ""} label="Monthly due day" max="31" min="1" name="dueDay" type="number" />
-                    <select className="field" defaultValue={selectedRecurringBill.categoryId ?? ""} name="categoryId">
-                      <option value="">Uncategorized</option>
-                      {categories.map((category) => (
-                        <option key={category.id} value={category.id}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
-                    <select className="field" defaultValue={selectedRecurringBill.accountId ?? ""} name="accountId">
-                      <option value="">No account</option>
-                      {accounts.map((account) => (
-                        <option key={account.id} value={account.id}>
-                          {account.name}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="flex flex-wrap items-center gap-4">
-                      <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-300">
-                        <input className="size-4 accent-teal-500" defaultChecked={selectedRecurringBill.autopay} name="autopay" type="checkbox" />
-                        Autopay
-                      </label>
-                      <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-300">
-                        <input className="size-4 accent-teal-500" defaultChecked={selectedRecurringBill.isSubscription} name="isSubscription" type="checkbox" />
-                        Subscription
-                      </label>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="label" htmlFor={`recurring-notes-${selectedRecurringBill.id}`}>
-                        Notes
-                      </label>
-                      <textarea className="field min-h-16" defaultValue={selectedRecurringBill.notes ?? ""} id={`recurring-notes-${selectedRecurringBill.id}`} name="notes" />
-                    </div>
-                    <button className="secondary-button" type="submit">
-                      <Save aria-hidden size={16} />
-                      Save recurring
-                    </button>
-                  </form>
+                  <p className="mt-1 text-sm text-slate-400">{describeBillSchedule(selectedRecurringBill)}</p>
+                  <div onSubmit={() => setSelectedId(null)}>
+                    <BillForm accounts={accounts} bill={selectedRecurringBill} categories={categories} compact />
+                  </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {selectedRecurringBill.active ? (
                       <form action={archiveRecurringBill} onSubmit={() => setSelectedId(null)}>
