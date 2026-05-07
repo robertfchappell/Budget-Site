@@ -346,6 +346,14 @@ function normalizePayrollFields(
   }
 ) {
   if (incomeType === "regular_paycheck") {
+    // When the payroll breakdown is filled in (base_pay > 0), auto-compute
+    // the net deposit so overtime/bonus changes reflect in projections.
+    if (values.basePay > 0) {
+      const computed = values.basePay + values.overtimePay + values.bonusPay + values.vaIncome - values.taxesWithheld;
+      if (computed > 0) {
+        return { ...values, depositAmount: computed };
+      }
+    }
     return values;
   }
 

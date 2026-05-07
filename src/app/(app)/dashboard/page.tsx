@@ -282,7 +282,6 @@ export default async function DashboardPage() {
             <Metric label="Recorded Expenses" value={data.monthlyExpenses} />
             <Metric label="Scheduled Expenses" value={data.projection.scheduledExpensesRemaining} />
             <Metric label="Planned Savings" value={data.projection.projectedSavings} />
-            <Metric label="Month Trajectory" value={data.projection.monthlyRollover} />
           </div>
           <div className="mt-4 border-t border-slate-800 pt-4">
             <h3 className="text-sm font-bold uppercase text-slate-400">Recurring Income Breakdown</h3>

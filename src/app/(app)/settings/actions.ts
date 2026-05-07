@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { withTransaction } from "@/lib/db";
 import { applyAccountDelta, setAccountBalance, syncLinkedSavingsGoals } from "@/lib/budget/accounting";
@@ -101,6 +102,7 @@ export async function updateAccountBalance(formData: FormData) {
   });
 
   revalidateFinancialPaths(financialPathGroups.settings);
+  redirect("/settings");
 }
 
 export async function deleteAccount(formData: FormData) {

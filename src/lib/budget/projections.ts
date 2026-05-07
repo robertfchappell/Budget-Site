@@ -63,8 +63,7 @@ export function calculateProjection(input: ProjectionInput): ProjectionResult {
 
   const reliableIncome = guaranteedIncome;
 
-  // Trajectory = net monthly cashflow: scheduled income minus all bills and expenses.
-  const monthlyRollover = scheduledMonthlyIncome - monthlyBills - monthlyExpenses;
+  const monthlyRollover = projectedEndOfMonthBalance;
 
   return {
     projectedEndOfMonthBalance,
