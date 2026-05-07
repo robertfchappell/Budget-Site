@@ -9,6 +9,7 @@ import {
 } from "@/lib/budget/income-types";
 import { incomeStatus } from "@/lib/budget/income-status";
 import { getFinancialAccounts, getFinancialState, getMonthlyFinancialRollups } from "@/lib/budget/financial-state";
+import { postDueIncomeDeposits } from "@/lib/budget/income-posting";
 import {
   normalizeAccountType,
   normalizeBillFrequency,
@@ -230,6 +231,7 @@ export async function getDashboardData(householdId: string) {
 }
 
 export async function getBillsPageData(householdId: string) {
+  await postDueIncomeDeposits(householdId);
   await ensureBillInstancesForRange(householdId);
   const month = currentMonth();
 
