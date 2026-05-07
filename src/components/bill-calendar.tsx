@@ -188,16 +188,6 @@ export function BillCalendar({
                         Mark unpaid
                       </button>
                     </form>
-                  ) : !selectedBill.accountId ? (
-                    <div className="max-w-sm">
-                      <button className="secondary-button opacity-60" disabled type="button">
-                        <CheckCircle2 aria-hidden size={16} />
-                        Mark paid
-                      </button>
-                      <p className="mt-2 text-xs text-amber-200">
-                        Link this bill to an account before marking it paid so the checking balance can update.
-                      </p>
-                    </div>
                   ) : (
                     <form action={markBillPaid} onSubmit={() => setSelectedId(null)}>
                       <input name="billInstanceId" type="hidden" value={selectedBill.id} />

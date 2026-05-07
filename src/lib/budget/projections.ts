@@ -63,10 +63,8 @@ export function calculateProjection(input: ProjectionInput): ProjectionResult {
 
   const reliableIncome = guaranteedIncome;
 
-  // Trajectory = where checking will be at end of month.
-  // Uses only remaining (pending/unpaid) amounts so paid bills and received
-  // income that are already in the account balance are not double-counted.
-  const monthlyRollover = projectedEndOfMonthBalance;
+  // Trajectory = net monthly cashflow: scheduled income minus all bills and expenses.
+  const monthlyRollover = scheduledMonthlyIncome - monthlyBills - monthlyExpenses;
 
   return {
     projectedEndOfMonthBalance,

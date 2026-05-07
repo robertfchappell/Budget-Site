@@ -90,16 +90,6 @@ export default async function BillsPage() {
                             Unpaid
                           </button>
                         </form>
-                      ) : !bill.accountId ? (
-                        <div className="max-w-56">
-                          <button className="secondary-button opacity-60" disabled type="button">
-                            <CheckCircle2 aria-hidden size={16} />
-                            Paid
-                          </button>
-                          <p className="mt-2 text-xs text-amber-200">
-                            Link this bill to an account before marking it paid.
-                          </p>
-                        </div>
                       ) : (
                         <form action={markBillPaid}>
                           <input name="billInstanceId" type="hidden" value={bill.id} />
