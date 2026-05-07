@@ -4,6 +4,7 @@ import { calculateProjection } from "@/lib/budget/projections";
 import { buildMonthlyIncomeForecast, type IncomeForecastRow } from "@/lib/budget/income-forecast";
 import { incomeTypeLabel } from "@/lib/budget/income-types";
 import { postDueIncomeDeposits } from "@/lib/budget/income-posting";
+import { postDueExpenses } from "@/lib/budget/expense-posting";
 import { ensureBillInstancesForRange } from "@/lib/budget/recurrence";
 import { asBoolean, asNumber, asNullableString, asString } from "@/lib/coerce";
 import {
@@ -69,6 +70,7 @@ export async function getFinancialState(
 
   const month = monthBounds(new Date());
   await postDueIncomeDeposits(householdId);
+  await postDueExpenses(householdId);
 
   const [
     accounts,
@@ -96,7 +98,8 @@ export async function getFinancialState(
         SELECT COALESCE(SUM(amount), 0) AS total
         FROM expenses
         WHERE household_id = $1
-          AND account_id IS NULL
+          AND account_id IS NOT NULL
+          AND balance_posted_at IS NULL
           AND expense_date >= CURRENT_DATE
           AND expense_date < $2
       `,

@@ -63,7 +63,7 @@ export async function createIncomeEntry(formData: FormData) {
         householdId: user.householdId,
         accountId: values.accountId,
         userId: user.id,
-        amount: values.depositAmount,
+        amount: effectiveDepositAmount(values.incomeType, values.depositAmount, values.basePay, values.overtimePay, values.bonusPay),
         activityType: "income_deposit",
         description: `Income: ${values.employer}`,
         activityDate: values.paycheckDate
@@ -83,13 +83,18 @@ export async function updateIncomeEntry(formData: FormData) {
   await withTransaction(async (client) => {
     const existing = await client.query<{
       id: string;
+      income_type: string;
       deposit_amount: number;
+      overtime_pay: number;
+      bonus_pay: number;
+      base_pay: number;
       account_id: string | null;
       employer: string;
       balance_posted_at: Date | null;
     }>(
       `
-        SELECT id, deposit_amount, account_id, employer, balance_posted_at
+        SELECT id, income_type, deposit_amount, overtime_pay, bonus_pay, base_pay,
+               account_id, employer, balance_posted_at
         FROM income_entries
         WHERE id = $1 AND household_id = $2
         FOR UPDATE
@@ -151,12 +156,29 @@ export async function updateIncomeEntry(formData: FormData) {
       ]
     );
 
+    // For regular paychecks in simple mode (no gross pay breakdown), overtime and bonus
+    // are additive on top of the net deposit so the account reflects the full paycheck.
+    const oldEffective = effectiveDepositAmount(
+      current.income_type,
+      current.deposit_amount,
+      current.base_pay,
+      current.overtime_pay,
+      current.bonus_pay
+    );
+    const newEffective = effectiveDepositAmount(
+      values.incomeType,
+      values.depositAmount,
+      values.basePay,
+      values.overtimePay,
+      values.bonusPay
+    );
+
     if (current.account_id && current.balance_posted_at) {
       await applyAccountDelta(client, {
         householdId: user.householdId,
         accountId: current.account_id,
         userId: user.id,
-        amount: -current.deposit_amount,
+        amount: -oldEffective,
         activityType: "income_deposit",
         description: `Income edit reversal: ${current.employer}`,
         activityDate: values.paycheckDate,
@@ -169,7 +191,7 @@ export async function updateIncomeEntry(formData: FormData) {
         householdId: user.householdId,
         accountId: values.accountId,
         userId: user.id,
-        amount: values.depositAmount,
+        amount: newEffective,
         activityType: "income_deposit",
         description: `Income: ${values.employer}`,
         activityDate: values.paycheckDate,
@@ -195,13 +217,18 @@ export async function deleteIncomeEntry(formData: FormData) {
   await withTransaction(async (client) => {
     const existing = await client.query<{
       id: string;
+      income_type: string;
       deposit_amount: number;
+      overtime_pay: number;
+      bonus_pay: number;
+      base_pay: number;
       account_id: string | null;
       employer: string;
       balance_posted_at: Date | null;
     }>(
       `
-        SELECT id, deposit_amount, account_id, employer, balance_posted_at
+        SELECT id, income_type, deposit_amount, overtime_pay, bonus_pay, base_pay,
+               account_id, employer, balance_posted_at
         FROM income_entries
         WHERE id = $1 AND household_id = $2
         FOR UPDATE
@@ -225,7 +252,7 @@ export async function deleteIncomeEntry(formData: FormData) {
         householdId: user.householdId,
         accountId: current.account_id,
         userId: user.id,
-        amount: -current.deposit_amount,
+        amount: -effectiveDepositAmount(current.income_type, current.deposit_amount, current.base_pay, current.overtime_pay, current.bonus_pay),
         activityType: "income_deposit",
         description: `Deleted income: ${current.employer}`,
         activityDate: todayIso()
@@ -365,4 +392,20 @@ function normalizePayrollFields(
     taxesWithheld: 0,
     depositAmount: values.depositAmount
   };
+}
+
+// For regular paychecks in simple mode (no gross pay), overtime and bonus
+// are entered as extras on top of the net deposit. The full amount posted
+// to the account is deposit + overtime + bonus.
+function effectiveDepositAmount(
+  incomeType: string,
+  depositAmount: number,
+  basePay: number,
+  overtimePay: number,
+  bonusPay: number
+) {
+  if (incomeType === "regular_paycheck" && basePay === 0) {
+    return depositAmount + (overtimePay ?? 0) + (bonusPay ?? 0);
+  }
+  return depositAmount;
 }

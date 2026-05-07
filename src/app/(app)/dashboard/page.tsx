@@ -133,32 +133,30 @@ export default async function DashboardPage() {
         <article className="panel p-4">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-bold text-white">Account Allocation</h2>
-              <p className="text-sm text-slate-400">Where household cash is sitting right now</p>
+              <h2 className="text-lg font-bold text-white">Upcoming Expenses</h2>
+              <p className="text-sm text-slate-400">Next 14 days</p>
             </div>
             <WalletCards aria-hidden className="text-sky-300" size={20} />
           </div>
           <div className="space-y-3">
-            {data.accounts.filter((account) => account.type === "checking" || account.type === "savings").length ? (
-              data.accounts
-                .filter((account) => account.type === "checking" || account.type === "savings")
-                .map((account) => {
-                const share = data.netCash > 0 ? Math.max(0, account.currentBalance / data.netCash) : 0;
-                return (
-                  <div key={account.id}>
-                    <div className="flex items-center justify-between gap-3 text-sm">
-                      <span className="min-w-0 truncate font-semibold text-white">{account.name}</span>
-                      <span className="shrink-0 font-bold tabular-nums text-slate-200">{dollars(account.currentBalance)}</span>
-                    </div>
-                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-800">
-                      <div className="h-full rounded-full bg-sky-400" style={{ width: `${Math.min(share * 100, 100)}%` }} />
-                    </div>
+            {data.upcomingExpenses.length ? (
+              data.upcomingExpenses.map((expense) => (
+                <div
+                  className="flex items-center justify-between gap-4 rounded-md border border-slate-800 bg-slate-950/40 p-3"
+                  key={expense.id}
+                >
+                  <div>
+                    <p className="font-semibold text-white">{expense.merchant}</p>
+                    <p className="text-sm text-slate-400">
+                      {displayShortDate(expense.expenseDate)} - {expense.categoryName ?? "Uncategorized"}
+                    </p>
                   </div>
-                );
-                })
+                  <p className="font-bold text-rose-200">{dollars(expense.amount)}</p>
+                </div>
+              ))
             ) : (
               <p className="rounded-md border border-dashed border-slate-700 p-4 text-sm text-slate-400">
-                Add checking or savings accounts in Settings to see allocation.
+                No upcoming expenses in the next two weeks.
               </p>
             )}
           </div>

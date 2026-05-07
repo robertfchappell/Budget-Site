@@ -86,6 +86,7 @@ export async function getDashboardData(householdId: string) {
 
   const [
     upcomingBills,
+    upcomingExpenses,
     upcomingDeposits,
     spendingByCategory,
     trend,
@@ -99,6 +100,27 @@ export async function getDashboardData(householdId: string) {
           AND bill_instances.due_date <= $3
           AND bill_instances.status = 'unpaid'
         ORDER BY bill_instances.due_date ASC, bill_instances.bill_name ASC
+        LIMIT 8
+      `,
+      [householdId, upcoming.startIso, upcoming.endIso]
+    ),
+    query<{
+      id: string;
+      merchant: string;
+      amount: number;
+      expense_date: string;
+      category_name: string | null;
+    }>(
+      `
+        SELECT expenses.id, expenses.merchant, expenses.amount, expenses.expense_date::text,
+               COALESCE(categories.name, expenses.category_snapshot, 'Uncategorized') AS category_name
+        FROM expenses
+        LEFT JOIN categories ON categories.id = expenses.category_id
+        WHERE expenses.household_id = $1
+          AND expenses.balance_posted_at IS NULL
+          AND expenses.expense_date >= $2
+          AND expenses.expense_date <= $3
+        ORDER BY expenses.expense_date ASC, expenses.amount DESC
         LIMIT 8
       `,
       [householdId, upcoming.startIso, upcoming.endIso]
@@ -192,6 +214,13 @@ export async function getDashboardData(householdId: string) {
     unpaidBillsRemaining: financial.unpaidBillsRemaining,
     monthlySavingsTarget: financial.monthlySavingsTarget,
     upcomingBills,
+    upcomingExpenses: upcomingExpenses.rows.map((row) => ({
+      id: asString(row.id),
+      merchant: asString(row.merchant, "Expense"),
+      amount: asNumber(row.amount),
+      expenseDate: safeIsoDate(row.expense_date),
+      categoryName: asNullableString(row.category_name)
+    })),
     upcomingDeposits: upcomingDeposits.rows.map((row) => ({
       id: asString(row.id),
       employer: asString(row.employer, "Income"),

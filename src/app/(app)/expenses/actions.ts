@@ -4,6 +4,7 @@ import Papa from "papaparse";
 import { requireUser } from "@/lib/auth";
 import { query, withTransaction } from "@/lib/db";
 import { applyAccountDelta, syncLinkedSavingsGoals } from "@/lib/budget/accounting";
+import { shouldPostExpense } from "@/lib/budget/expense-posting";
 import { financialPathGroups, revalidateFinancialPaths } from "@/lib/budget/revalidation";
 import { expenseSchema } from "@/lib/validators";
 import type { PaymentMethod } from "@/lib/types";
@@ -14,13 +15,14 @@ export async function createExpense(formData: FormData) {
   const categoryName = await findCategoryName(user.householdId, values.categoryId || null);
 
   await withTransaction(async (client) => {
-    await client.query(
+    const inserted = await client.query<{ id: string }>(
       `
         INSERT INTO expenses (
           household_id, user_id, account_id, category_id, amount, category_snapshot,
           merchant, notes, expense_date, payment_method
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING id
       `,
       [
         user.householdId,
@@ -35,8 +37,9 @@ export async function createExpense(formData: FormData) {
         values.paymentMethod
       ]
     );
+    const expenseId = inserted.rows[0]?.id;
 
-    if (values.accountId) {
+    if (expenseId && values.accountId && shouldPostExpense(values.expenseDate)) {
       await applyAccountDelta(client, {
         householdId: user.householdId,
         accountId: values.accountId,
@@ -46,6 +49,10 @@ export async function createExpense(formData: FormData) {
         description: `Expense: ${values.merchant}`,
         activityDate: values.expenseDate
       });
+      await client.query(
+        "UPDATE expenses SET balance_posted_at = now() WHERE id = $1",
+        [expenseId]
+      );
     }
   });
 
@@ -64,9 +71,10 @@ export async function updateExpense(formData: FormData) {
       amount: number;
       account_id: string | null;
       merchant: string;
+      balance_posted_at: Date | null;
     }>(
       `
-        SELECT id, amount, account_id, merchant
+        SELECT id, amount, account_id, merchant, balance_posted_at
         FROM expenses
         WHERE id = $1 AND household_id = $2
         FOR UPDATE
@@ -90,7 +98,8 @@ export async function updateExpense(formData: FormData) {
             merchant = $7,
             notes = $8,
             expense_date = $9,
-            payment_method = $10
+            payment_method = $10,
+            balance_posted_at = NULL
         WHERE id = $1 AND household_id = $2
       `,
       [
@@ -107,7 +116,7 @@ export async function updateExpense(formData: FormData) {
       ]
     );
 
-    if (current.account_id) {
+    if (current.account_id && current.balance_posted_at) {
       await applyAccountDelta(client, {
         householdId: user.householdId,
         accountId: current.account_id,
@@ -120,7 +129,7 @@ export async function updateExpense(formData: FormData) {
       });
     }
 
-    if (values.accountId) {
+    if (values.accountId && shouldPostExpense(values.expenseDate)) {
       await applyAccountDelta(client, {
         householdId: user.householdId,
         accountId: values.accountId,
@@ -131,6 +140,10 @@ export async function updateExpense(formData: FormData) {
         activityDate: values.expenseDate,
         syncSavingsGoal: false
       });
+      await client.query(
+        "UPDATE expenses SET balance_posted_at = now() WHERE id = $1",
+        [expenseId]
+      );
     }
 
     const accountIds = [...new Set([current.account_id, values.accountId].filter(Boolean))] as string[];
@@ -153,9 +166,10 @@ export async function deleteExpense(formData: FormData) {
       amount: number;
       account_id: string | null;
       merchant: string;
+      balance_posted_at: Date | null;
     }>(
       `
-        SELECT id, amount, account_id, merchant
+        SELECT id, amount, account_id, merchant, balance_posted_at
         FROM expenses
         WHERE id = $1 AND household_id = $2
         FOR UPDATE
@@ -174,7 +188,7 @@ export async function deleteExpense(formData: FormData) {
       [expenseId, user.householdId]
     );
 
-    if (current.account_id) {
+    if (current.account_id && current.balance_posted_at) {
       await applyAccountDelta(client, {
         householdId: user.householdId,
         accountId: current.account_id,
@@ -244,7 +258,7 @@ export async function importExpensesCsv(formData: FormData) {
         ]
       );
 
-      if (accountId) {
+      if (accountId && shouldPostExpense(expenseDate)) {
         await applyAccountDelta(client, {
           householdId: user.householdId,
           accountId,
@@ -254,6 +268,10 @@ export async function importExpensesCsv(formData: FormData) {
           description: `Imported expense: ${merchant}`,
           activityDate: expenseDate
         });
+        await client.query(
+          "UPDATE expenses SET balance_posted_at = now() WHERE household_id = $1 AND merchant = $2 AND expense_date = $3 AND balance_posted_at IS NULL",
+          [user.householdId, merchant, expenseDate]
+        );
       }
     }
   });
